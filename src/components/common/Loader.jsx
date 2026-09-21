@@ -1,0 +1,20 @@
+function Loader({ size = "md" }) {
+  const sizes = {
+    sm: "h-4 w-4",
+    md: "h-6 w-6",
+    lg: "h-10 w-10",
+  };
+
+  return (
+    <div
+      className={`
+        animate-spin rounded-full
+        border-2 border-var(--primary-light)
+        border-t-var(--primary)
+        ${sizes[size]}
+      `}
+    />
+  );
+}
+
+export default Loader;

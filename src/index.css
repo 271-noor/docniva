@@ -23,13 +23,13 @@
 }
 
 [data-theme="dark"] {
-  --background: #071A18;
-  --card: #0D2623;
+  --background: #000000;
+  --card: #111111;
 
-  --text-primary: #ECFFFC;
-  --text-secondary: #A8C4C0;
+   --text-primary: #FFFFFF;
+  --text-secondary: #A8A8A8;
 
-  --border: #1C403C;
+  --border: #262626;
 
   --primary: #0BAA96;
   --primary-hover: #22C7B2;
