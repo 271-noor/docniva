@@ -1,3 +1,4 @@
+
 function Card({
   children,
   className = "",
@@ -7,8 +8,8 @@ function Card({
     <div
       className={`
         rounded-xl
-        border border-var(--border)
-        bg-var(--card)
+        border border-[var(--border)]
+        bg-[var(--card)]
         shadow-sm
         ${padding ? "p-5" : ""}
         ${className}
@@ -20,3 +21,4 @@ function Card({
 }
 
 export default Card;
+

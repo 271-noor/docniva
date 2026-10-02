@@ -1,40 +1,83 @@
 @import "tailwindcss";
 
+/* ========================================
+   DOCNIVA - DESIGN TOKENS
+   ======================================== */
+
 :root {
+  /* Brand */
   --primary: #038474;
-  --primary-hover: #026B60;
-  --primary-light: #D9F4EF;
-  --secondary: #0BAA96;
-  --accent: #22C7B2;
+  --primary-hover: #026b60;
+  --primary-light: #d9f4ef;
 
-  --background: #FFFFFF;
-  --soft-background: #F4FAF9;
-  --card: #FFFFFF;
+  --secondary: #0baa96;
+  --accent: #22c7b2;
 
-  --text-primary: #102A2A;
-  --text-secondary: #5B6B6B;
+  /* Backgrounds */
+  --background: #ffffff;
+  --soft-background: #f4faf9;
+  --surface: #ffffff;
+  --card: #ffffff;
 
-  --border: #DDEBE8;
+  /* Text */
+  --text-primary: #102a2a;
+  --text-secondary: #4b5f5d;
+  --text-muted: #718482;
 
-  --success: #16A34A;
-  --warning: #F59E0B;
-  --danger: #DC2626;
-  --info: #2563EB;
+  /* Borders */
+  --border: #c8dcd8;
+
+  /* Inputs */
+  --input-background: #ffffff;
+  --input-text: #102a2a;
+  --input-placeholder: #718482;
+
+  /* Status */
+  --success: #16a34a;
+  --warning: #f59e0b;
+  --danger: #dc2626;
+  --info: #2563eb;
+
+  color-scheme: light;
 }
+
+
+/* ========================================
+   DARK THEME
+   ======================================== */
 
 [data-theme="dark"] {
+  /* Backgrounds */
   --background: #000000;
-  --card: #111111;
+  --soft-background: #050505;
+  --surface: #000000;
+  --card: #000000;
 
-   --text-primary: #FFFFFF;
-  --text-secondary: #A8A8A8;
+  /* Text */
+  --text-primary: #ecfffc;
+  --text-secondary: #a8c4c0;
+  --text-muted: #8eaaa5;
 
-  --border: #262626;
+  /* Borders */
+  --border: #1c403c;
 
-  --primary: #0BAA96;
-  --primary-hover: #22C7B2;
-  --primary-light: #123A35;
+  /* Brand - SAME GREEN COLORS */
+  --primary: #0baa96;
+  --primary-hover: #22c7b2;
+  --primary-light: #123a35;
+
+  /* Inputs */
+  --input-background: #000000;
+  --input-text: #ecfffc;
+  --input-placeholder: #8eaaa5;
+
+  color-scheme: dark;
 }
+
+
+/* ========================================
+   GLOBAL RESET
+   ======================================== */
 
 * {
   box-sizing: border-box;
@@ -46,8 +89,659 @@ html {
 
 body {
   margin: 0;
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
     sans-serif;
+
   background: var(--background);
   color: var(--text-primary);
+
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
+
+
+/* ========================================
+   FORM ELEMENTS
+   ======================================== */
+
+input,
+textarea,
+select {
+  color: var(--input-text);
+  background-color: var(--input-background);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--input-placeholder);
+}
+
+
+/* ========================================
+   BUTTON / INPUT FOCUS
+   ======================================== */
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+
+/* ========================================
+   SELECTION
+   ======================================== */
+
+::selection {
+  background: var(--primary-light);
+  color: var(--text-primary);
+}
+
+
+/* ========================================
+   DOCNIVA - NAVBAR
+   ======================================== */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+
+  width: 100%;
+
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.navbar-container {
+  width: min(1200px, 92%);
+  min-height: 72px;
+
+  margin: 0 auto;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+
+/* ========================================
+   LOGO
+   ======================================== */
+
+.navbar-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+
+  color: var(--primary);
+  text-decoration: none;
+
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+
+  transition: color 0.2s ease;
+}
+
+.navbar-logo:hover {
+  color: var(--primary-hover);
+}
+
+.logo-icon {
+  width: 35px;
+  height: 35px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 10px;
+
+  background: var(--primary);
+  color: #ffffff;
+
+  font-size: 20px;
+  font-weight: 700;
+
+  transition: background-color 0.2s ease;
+}
+
+
+/* ========================================
+   NAVIGATION LINKS
+   ======================================== */
+
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.navbar-links a {
+  padding: 10px 14px;
+
+  color: var(--text-secondary);
+  text-decoration: none;
+
+  font-size: 0.95rem;
+  font-weight: 500;
+
+  border-radius: 8px;
+
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.navbar-links a:hover {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+
+/* ========================================
+   GET STARTED BUTTON
+   ======================================== */
+
+.navbar-links .navbar-cta {
+  margin-left: 8px;
+
+  padding: 11px 20px;
+
+  background: var(--primary);
+  color: #ffffff;
+
+  border-radius: 9px;
+
+  font-weight: 600;
+}
+
+.navbar-links .navbar-cta:hover {
+  background: var(--primary-hover);
+  color: #ffffff;
+}
+
+
+/* ========================================
+   MOBILE MENU BUTTON
+   ======================================== */
+
+.menu-button {
+  display: none;
+
+  width: 42px;
+  height: 42px;
+
+  padding: 8px;
+
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+
+  border: 1px solid var(--border);
+  border-radius: 9px;
+
+  background: var(--surface);
+  color: var(--text-primary);
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.menu-button:hover {
+  background: var(--primary-light);
+}
+
+.menu-button span {
+  width: 21px;
+  height: 2px;
+
+  background: var(--text-primary);
+
+  border-radius: 5px;
+
+  transition: background-color 0.2s ease;
+}
+
+
+/* ========================================
+   THEME TOGGLE
+   ======================================== */
+
+.theme-toggle {
+  width: 40px;
+  height: 40px;
+
+  margin-left: 6px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid var(--border);
+  border-radius: 50%;
+
+  background: var(--surface);
+  color: var(--text-primary);
+
+  font-size: 18px;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+
+/* ========================================
+   DESKTOP THEME TOGGLE HOVER
+   ======================================== */
+
+@media (min-width: 769px) {
+  .theme-toggle:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    transform: rotate(10deg);
+  }
+}
+
+
+/* ========================================
+   TABLET NAVBAR
+   ======================================== */
+
+@media (max-width: 768px) {
+  .navbar-container {
+    min-height: 64px;
+  }
+
+  .navbar-logo {
+    font-size: 1.3rem;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+
+    font-size: 18px;
+  }
+
+  .menu-button {
+    display: flex;
+  }
+
+  .navbar-links {
+    display: none;
+
+    position: absolute;
+
+    top: 64px;
+    left: 0;
+
+    width: 100%;
+
+    padding: 12px 5% 18px;
+
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .navbar-links.active {
+    display: flex;
+  }
+
+  .navbar-links a {
+    width: 100%;
+
+    padding: 13px 15px;
+
+    text-align: left;
+  }
+
+  .navbar-links .navbar-cta {
+    margin-left: 0;
+    margin-top: 4px;
+
+    text-align: center;
+  }
+
+  .theme-toggle {
+    width: 100%;
+    height: 44px;
+
+    margin-left: 0;
+    margin-top: 4px;
+
+    border-radius: 8px;
+    transform: none;
+  }
+
+  .theme-toggle:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+  }
+}
+
+
+/* ========================================
+   SMALL MOBILE
+   ======================================== */
+
+@media (max-width: 480px) {
+  .navbar-container {
+    width: 90%;
+  }
+
+  .navbar-logo {
+    font-size: 1.2rem;
+  }
+
+  .logo-icon {
+    width: 30px;
+    height: 30px;
+
+    border-radius: 8px;
+
+    font-size: 17px;
+  }
+
+  .menu-button {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+
+/* ========================================
+   DOCNIVA FOOTER
+   ======================================== */
+
+.footer {
+  width: 100%;
+
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+
+  color: var(--text-primary);
+}
+
+.footer-container {
+  width: min(1200px, 92%);
+
+  margin: 0 auto;
+
+  padding: 56px 0 42px;
+
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 48px;
+}
+
+
+/* Brand */
+
+.footer-brand {
+  max-width: 360px;
+}
+
+.footer-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+
+  text-decoration: none;
+  color: var(--primary);
+
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+
+.footer-logo-icon {
+  width: 34px;
+  height: 34px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 10px;
+
+  background: var(--primary);
+  color: #ffffff;
+
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.footer-brand p {
+  margin: 16px 0 0;
+
+  color: var(--text-secondary);
+
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+
+/* Links */
+
+.footer-links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.footer-links h3 {
+  margin: 0 0 5px;
+
+  color: var(--text-primary);
+
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.footer-links a {
+  color: var(--text-secondary);
+  text-decoration: none;
+
+  font-size: 0.9rem;
+
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.footer-links a:hover {
+  color: var(--primary);
+  transform: translateX(2px);
+}
+
+
+/* Bottom */
+
+.footer-bottom {
+  border-top: 1px solid var(--border);
+}
+
+.footer-bottom p {
+  width: min(1200px, 92%);
+
+  margin: 0 auto;
+
+  padding: 18px 0;
+
+  color: var(--text-muted);
+
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+
+/* ========================================
+   FOOTER TABLET
+   ======================================== */
+
+@media (max-width: 768px) {
+  .footer-container {
+    grid-template-columns: 1fr 1fr;
+
+    gap: 36px;
+
+    padding: 44px 0 34px;
+  }
+
+  .footer-brand {
+    grid-column: 1 / -1;
+    max-width: 100%;
+  }
+}
+
+
+/* ========================================
+   FOOTER MOBILE
+   ======================================== */
+
+@media (max-width: 480px) {
+  .footer-container {
+    width: 90%;
+
+    grid-template-columns: 1fr;
+
+    gap: 30px;
+
+    padding: 38px 0 30px;
+  }
+
+  .footer-brand {
+    grid-column: auto;
+  }
+
+  .footer-links {
+    gap: 10px;
+  }
+
+  .footer-bottom p {
+    width: 90%;
+    line-height: 1.5;
+  }
+}
+
+
+/* ========================================
+   DATE / TIME INPUT
+   ======================================== */
+
+input[type="date"],
+input[type="time"] {
+  color: var(--input-text);
+  background-color: var(--input-background);
+
+  border-color: var(--border);
+
+  color-scheme: light;
+}
+
+
+/* ========================================
+   CALENDAR / TIME ICON
+   ======================================== */
+
+/* Light theme */
+
+:root input[type="date"]::-webkit-calendar-picker-indicator,
+:root input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: brightness(0);
+
+  cursor: pointer;
+}
+
+
+/* Dark theme */
+
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(95%);
+
+  cursor: pointer;
+}
+
+
+/* ========================================
+   DARK THEME - FORCE BLACK MAIN SURFACES
+   ======================================== */
+
+[data-theme="dark"] body {
+  background: #000000;
+}
+
+[data-theme="dark"] .navbar,
+[data-theme="dark"] .footer {
+  background: #000000;
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  background-color: #000000;
+  color: var(--input-text);
+}
+
+
+/* ========================================
+   DARK THEME - SCROLLBAR
+   ======================================== */
+
+[data-theme="dark"] {
+  scrollbar-color: #1c403c #000000;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 10px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: #000000;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #1c403c;
+  border-radius: 10px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+
+
+

@@ -1,3 +1,4 @@
+
 function Loader({ size = "md" }) {
   const sizes = {
     sm: "h-4 w-4",
@@ -8,13 +9,18 @@ function Loader({ size = "md" }) {
   return (
     <div
       className={`
-        animate-spin rounded-full
-        border-2 border-var(--primary-light)
-        border-t-var(--primary)
-        ${sizes[size]}
+        animate-spin
+        rounded-full
+        border-2
+        border-[var(--primary-light)]
+        border-t-[var(--primary)]
+        ${sizes[size] || sizes.md}
       `}
+      role="status"
+      aria-label="Loading"
     />
   );
 }
 
 export default Loader;
+
