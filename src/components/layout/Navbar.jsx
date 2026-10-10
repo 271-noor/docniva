@@ -1,4 +1,4 @@
-
+ 
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTheme } from "../../hooks/useTheme";
@@ -22,26 +22,44 @@ function Navbar() {
       <div className="navbar-container">
 
         {/* Logo */}
-        <Link to="/" className="navbar-logo" onClick={closeMenu}>
+        <Link
+          to="/"
+          className="navbar-logo"
+          onClick={closeMenu}
+        >
           <span className="logo-icon">✚</span>
           <span>DocNiva</span>
         </Link>
 
         {/* Navigation */}
         <nav className={`navbar-links ${menuOpen ? "active" : ""}`}>
-          <Link to="/" onClick={closeMenu}>
+
+          <Link
+            to="/"
+            onClick={closeMenu}
+          >
             Home
           </Link>
 
-          <Link to="/role" onClick={closeMenu}>
+          <Link
+            to="/patient/find-doctor"
+            onClick={closeMenu}
+          >
             Find a Doctor
           </Link>
 
-          <Link to="/role" onClick={closeMenu}>
+          <Link
+            to="/patient/appointments"
+            onClick={closeMenu}
+          >
             Appointments
           </Link>
 
-          <Link to="/role" className="navbar-cta" onClick={closeMenu}>
+          <Link
+            to="/role"
+            className="navbar-cta"
+            onClick={closeMenu}
+          >
             Get Started
           </Link>
 
@@ -59,6 +77,7 @@ function Navbar() {
           >
             {theme === "light" ? "🌙" : "☀️"}
           </button>
+
         </nav>
 
         {/* Mobile Menu Button */}
@@ -80,4 +99,4 @@ function Navbar() {
 }
 
 export default Navbar;
-
+ 
