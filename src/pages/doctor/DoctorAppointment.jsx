@@ -1,4 +1,3 @@
- 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -6,274 +5,446 @@ import Button from "../../components/common/Button";
 import Card from "../../components/common/Card";
 import Badge from "../../components/common/Badge";
 
+const API_URL = "http://localhost:5000/api";
+
 function DoctorAppointments() {
   const navigate = useNavigate();
 
-  const [appointment, setAppointment] = useState(null);
+  const [appointments, setAppointments] =
+    useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [updatingId, setUpdatingId] =
+    useState(null);
 
   useEffect(() => {
-    loadAppointment();
+    loadAppointments();
   }, []);
 
-  const loadAppointment = () => {
-    const savedAppointment = localStorage.getItem(
-      "docniva-appointment"
-    );
+  const loadAppointments = async () => {
+    try {
+      setLoading(true);
+      setError("");
 
-    if (savedAppointment) {
-      try {
-        setAppointment(JSON.parse(savedAppointment));
-      } catch (error) {
-        console.error("Invalid appointment data:", error);
-        setAppointment(null);
+      const token = localStorage.getItem(
+        "docniva-doctor-token"
+      );
+
+      if (!token) {
+        setError(
+          "Doctor login required. Please login again."
+        );
+        return;
       }
+
+      const response = await fetch(
+        `${API_URL}/doctors/appointments`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      console.log(
+        "GET DOCTOR APPOINTMENTS:",
+        data
+      );
+
+      if (!response.ok) {
+        setError(
+          data.message ||
+            "Failed to load appointments."
+        );
+        setAppointments([]);
+        return;
+      }
+
+      if (
+        data.success &&
+        Array.isArray(data.appointments)
+      ) {
+        setAppointments(data.appointments);
+      } else {
+        setAppointments([]);
+      }
+    } catch (error) {
+      console.error(
+        "Load doctor appointments error:",
+        error
+      );
+
+      setError(
+        "Unable to connect to backend."
+      );
+
+      setAppointments([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const updateStatus = (status) => {
-    if (!appointment) return;
+  const updateStatus = async (
+    appointmentId,
+    status
+  ) => {
+    try {
+      setUpdatingId(appointmentId);
+      setError("");
 
-    const updatedAppointment = {
-      ...appointment,
-      status,
-    };
+      const token = localStorage.getItem(
+        "docniva-doctor-token"
+      );
 
-    localStorage.setItem(
-      "docniva-appointment",
-      JSON.stringify(updatedAppointment)
-    );
+      if (!token) {
+        setError(
+          "Doctor login required. Please login again."
+        );
+        return;
+      }
 
-    setAppointment(updatedAppointment);
+      const response = await fetch(
+        `${API_URL}/doctors/appointments/${appointmentId}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            status,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      console.log(
+        "UPDATE APPOINTMENT STATUS:",
+        data
+      );
+
+      if (!response.ok) {
+        setError(
+          data.message ||
+            "Failed to update appointment."
+        );
+        return;
+      }
+
+      if (data.success) {
+        setAppointments((prev) =>
+          prev.map((appointment) =>
+            appointment._id === appointmentId
+              ? data.appointment ||
+                {
+                  ...appointment,
+                  status,
+                }
+              : appointment
+          )
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Update appointment status error:",
+        error
+      );
+
+      setError(
+        "Unable to update appointment."
+      );
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   const getBadgeStatus = (status) => {
-    if (status === "confirmed") return "confirmed";
-    if (status === "rejected") return "danger";
+    if (status === "confirmed") {
+      return "confirmed";
+    }
+
+    if (
+      status === "rejected" ||
+      status === "cancelled"
+    ) {
+      return "danger";
+    }
+
     return "pending";
   };
 
   const getStatusText = (status) => {
-    if (status === "confirmed") return "Confirmed";
-    if (status === "rejected") return "Rejected";
+    if (status === "confirmed") {
+      return "Confirmed";
+    }
+
+    if (status === "rejected") {
+      return "Rejected";
+    }
+
+    if (status === "cancelled") {
+      return "Cancelled";
+    }
+
     return "Pending";
   };
+
+  if (loading) {
+    return (
+      <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <Card className="p-8 text-center">
+
+            <div className="text-3xl">
+              ⏳
+            </div>
+
+            <p className="mt-4 text-sm text-[var(--text-secondary)]">
+              Loading appointments...
+            </p>
+
+          </Card>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-6xl">
 
-        {/* Back */}
         <button
           type="button"
-          onClick={() => navigate("/doctor/dashboard")}
+          onClick={() =>
+            navigate("/doctor/dashboard")
+          }
           className="mb-6 text-sm font-medium text-[var(--primary)] hover:underline"
         >
           ← Back to Dashboard
         </button>
 
-        {/* Header */}
-        <div className="mb-8">
-          <p className="font-semibold text-[var(--primary)]">
-            Doctor Appointments
-          </p>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
 
-          <h1 className="mt-2 text-2xl font-bold text-[var(--text-primary)] sm:text-3xl">
-            Appointments
-          </h1>
-
-          <p className="mt-2 text-[var(--text-secondary)]">
-            View and manage patient appointments.
-          </p>
-        </div>
-
-        {/* No Appointment */}
-        {!appointment ? (
-          <Card className="p-8 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--primary-light)] text-2xl">
-              📅
-            </div>
-
-            <h2 className="mt-5 text-xl font-bold text-[var(--text-primary)]">
-              No appointments yet
-            </h2>
-
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--text-secondary)]">
-              Patient appointments will appear here once a patient books an
-              appointment with you.
+          <div>
+            <p className="font-semibold text-[var(--primary)]">
+              Doctor Appointments
             </p>
 
-            <Button
-              className="mt-6"
-              onClick={() => navigate("/doctor/dashboard")}
-            >
-              Back to Dashboard
-            </Button>
+            <h1 className="mt-2 text-2xl font-bold text-[var(--text-primary)] sm:text-3xl">
+              Appointment Requests
+            </h1>
+
+            <p className="mt-2 text-[var(--text-secondary)]">
+              View and manage appointments booked by patients.
+            </p>
+          </div>
+
+          <Button
+            variant="outline"
+            onClick={loadAppointments}
+          >
+            Refresh
+          </Button>
+
+        </div>
+
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4">
+            <p className="text-sm font-medium text-red-700">
+              {error}
+            </p>
+          </div>
+        )}
+
+        {appointments.length === 0 ? (
+          <Card className="p-10 text-center">
+
+            <div className="text-4xl">
+              📋
+            </div>
+
+            <h2 className="mt-4 text-lg font-semibold text-[var(--text-primary)]">
+              No appointments
+            </h2>
+
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Patient appointment requests will appear here.
+            </p>
+
           </Card>
         ) : (
-          <Card className="overflow-hidden">
+          <div className="space-y-5">
 
-            {/* Card Header */}
-            <div className="flex flex-col gap-4 border-b border-[var(--border)] p-6 sm:flex-row sm:items-center sm:justify-between">
+            {appointments.map((appointment) => {
 
-              <div>
-                <p className="text-sm font-medium text-[var(--text-secondary)]">
-                  Patient Appointment
-                </p>
+              const isUpdating =
+                updatingId === appointment._id;
 
-                <h2 className="mt-1 text-xl font-bold text-[var(--text-primary)]">
-                  {appointment.patient?.name || "Patient"}
-                </h2>
-
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                  {appointment.patient?.email || "Patient details"}
-                </p>
-              </div>
-
-              <Badge status={getBadgeStatus(appointment.status)}>
-                {getStatusText(appointment.status)}
-              </Badge>
-
-            </div>
-
-            {/* Appointment Details */}
-            <div className="grid gap-6 p-6 sm:grid-cols-2 lg:grid-cols-3">
-
-              {/* Patient */}
-              <div>
-                <p className="text-xs font-medium text-[var(--text-muted)]">
-                  Patient
-                </p>
-
-                <p className="mt-2 font-semibold text-[var(--text-primary)]">
-                  {appointment.patient?.name || "Patient"}
-                </p>
-
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                  {appointment.patient?.email || "Email not available"}
-                </p>
-              </div>
-
-              {/* Doctor */}
-              <div>
-                <p className="text-xs font-medium text-[var(--text-muted)]">
-                  Doctor
-                </p>
-
-                <p className="mt-2 font-semibold text-[var(--text-primary)]">
-                  {appointment.doctor?.name || "Doctor"}
-                </p>
-
-                <p className="mt-1 text-sm text-[var(--primary)]">
-                  {appointment.doctor?.specialization || "Specialist"}
-                </p>
-              </div>
-
-              {/* Date */}
-              <div>
-                <p className="text-xs font-medium text-[var(--text-muted)]">
-                  Appointment Date
-                </p>
-
-                <p className="mt-2 font-semibold text-[var(--text-primary)]">
-                  {appointment.date || "Not available"}
-                </p>
-              </div>
-
-              {/* Time */}
-              <div>
-                <p className="text-xs font-medium text-[var(--text-muted)]">
-                  Appointment Time
-                </p>
-
-                <p className="mt-2 font-semibold text-[var(--text-primary)]">
-                  {appointment.selectedTime || "Not available"}
-                </p>
-              </div>
-
-              {/* Consultation */}
-              <div>
-                <p className="text-xs font-medium text-[var(--text-muted)]">
-                  Consultation Type
-                </p>
-
-                <p className="mt-2 font-semibold text-[var(--text-primary)]">
-                  {appointment.consultationType || "Clinic Visit"}
-                </p>
-              </div>
-
-              {/* Fee */}
-              <div>
-                <p className="text-xs font-medium text-[var(--text-muted)]">
-                  Consultation Fee
-                </p>
-
-                <p className="mt-2 font-semibold text-[var(--text-primary)]">
-                  {appointment.doctor?.fee || "Not available"}
-                </p>
-              </div>
-
-            </div>
-
-            {/* Reason */}
-            {appointment.reason && (
-              <div className="border-t border-[var(--border)] p-6">
-                <p className="text-xs font-medium text-[var(--text-muted)]">
-                  Reason for Visit
-                </p>
-
-                <p className="mt-2 rounded-xl bg-[var(--soft-background)] p-4 text-sm leading-6 text-[var(--text-secondary)]">
-                  {appointment.reason}
-                </p>
-              </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex flex-col gap-3 border-t border-[var(--border)] p-6 sm:flex-row sm:justify-end">
-
-              <Button
-                variant="outline"
-                onClick={() => navigate("/doctor/dashboard")}
-              >
-                Dashboard
-              </Button>
-
-              {appointment.status === "pending" && (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={() => updateStatus("rejected")}
-                  >
-                    Reject
-                  </Button>
-
-                  <Button
-                    onClick={() => updateStatus("confirmed")}
-                  >
-                    Accept Appointment
-                  </Button>
-                </>
-              )}
-
-              {appointment.status === "confirmed" && (
-                <Button
-                  variant="outline"
-                  onClick={() => updateStatus("rejected")}
+              return (
+                <Card
+                  key={appointment._id}
+                  className="p-6"
                 >
-                  Reject Appointment
-                </Button>
-              )}
 
-              {appointment.status === "rejected" && (
-                <Button
-                  onClick={() => updateStatus("confirmed")}
-                >
-                  Accept Appointment
-                </Button>
-              )}
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
 
-            </div>
+                    <div>
 
-          </Card>
+                      <div className="flex flex-wrap items-center gap-3">
+
+                        <h2 className="text-xl font-bold text-[var(--text-primary)]">
+                          {appointment.patient?.name ||
+                            "Patient"}
+                        </h2>
+
+                        <Badge
+                          status={getBadgeStatus(
+                            appointment.status
+                          )}
+                        >
+                          {getStatusText(
+                            appointment.status
+                          )}
+                        </Badge>
+
+                      </div>
+
+                      <div className="mt-3 space-y-1">
+
+                        <p className="text-sm text-[var(--text-secondary)]">
+                          📧{" "}
+                          {appointment.patient?.email ||
+                            "Email not available"}
+                        </p>
+
+                        {appointment.patient?.phone && (
+                          <p className="text-sm text-[var(--text-secondary)]">
+                            📞{" "}
+                            {appointment.patient.phone}
+                          </p>
+                        )}
+
+                      </div>
+
+                    </div>
+
+                    <div className="rounded-xl bg-[var(--primary-light)] px-5 py-4 lg:min-w-[220px]">
+
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Appointment
+                      </p>
+
+                      <p className="mt-1 font-semibold text-[var(--text-primary)]">
+                        {appointment.date}
+                      </p>
+
+                      <p className="mt-1 font-semibold text-[var(--primary)]">
+                        {appointment.selectedTime}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                  <div className="mt-6 grid gap-4 border-t border-[var(--border)] pt-5 sm:grid-cols-3">
+
+                    <div>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Consultation
+                      </p>
+
+                      <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
+                        {appointment.consultationType ||
+                          "Clinic Visit"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Date
+                      </p>
+
+                      <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
+                        {appointment.date}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Status
+                      </p>
+
+                      <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
+                        {getStatusText(
+                          appointment.status
+                        )}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {appointment.reason && (
+                    <div className="mt-5 border-t border-[var(--border)] pt-5">
+
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Reason
+                      </p>
+
+                      <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+                        {appointment.reason}
+                      </p>
+
+                    </div>
+                  )}
+
+                  {appointment.status ===
+                    "pending" && (
+                    <div className="mt-6 flex flex-col gap-3 border-t border-[var(--border)] pt-5 sm:flex-row sm:justify-end">
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isUpdating}
+                        onClick={() =>
+                          updateStatus(
+                            appointment._id,
+                            "rejected"
+                          )
+                        }
+                      >
+                        {isUpdating
+                          ? "Updating..."
+                          : "Reject"}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() =>
+                          updateStatus(
+                            appointment._id,
+                            "confirmed"
+                          )
+                        }
+                      >
+                        {isUpdating
+                          ? "Updating..."
+                          : "Confirm"}
+                      </Button>
+
+                    </div>
+                  )}
+
+                </Card>
+              );
+            })}
+
+          </div>
         )}
 
       </div>
@@ -282,4 +453,3 @@ function DoctorAppointments() {
 }
 
 export default DoctorAppointments;
- 
