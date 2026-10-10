@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -6,39 +5,104 @@ import Button from "../../components/common/Button";
 import Card from "../../components/common/Card";
 import Input from "../../components/common/Input";
 
-const defaultProfile = {
-  name: "Dr. Rozy",
-  specialization: "Cardiologist",
-  qualification: "MBBS, MD Cardiology",
-  experience: "8 years",
-  location: "Agra",
-  fee: "₹800",
-  about:
-    "Experienced cardiologist focused on providing personalized cardiac care and helping patients maintain a healthy heart.",
+const API_URL = "http://localhost:5000/api";
+
+const emptyProfile = {
+  id: "",
+  name: "",
+  email: "",
+  phone: "",
+  registrationNumber: "",
+  qualification: "",
+  specialization: "",
+  experience: "",
 };
 
 function DoctorProfile() {
   const navigate = useNavigate();
 
-  const [profile, setProfile] = useState(() => {
-    const savedProfile = localStorage.getItem("docniva-doctor-profile");
+  const [profile, setProfile] =
+    useState(emptyProfile);
 
-    if (savedProfile) {
-      try {
-        return JSON.parse(savedProfile);
-      } catch (error) {
-        console.error("Invalid doctor profile data:", error);
-      }
-    }
-
-    return defaultProfile;
-  });
-
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    setSaved(false);
-  }, [profile]);
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const token = localStorage.getItem(
+        "docniva-doctor-token"
+      );
+
+      if (!token) {
+        setError(
+          "Doctor login required. Please login again."
+        );
+        return;
+      }
+
+      const response = await fetch(
+        `${API_URL}/doctors/profile`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      console.log(
+        "GET DOCTOR PROFILE:",
+        data
+      );
+
+      if (!response.ok) {
+        setError(
+          data.message ||
+            "Unable to load doctor profile."
+        );
+        return;
+      }
+
+      if (data.success && data.doctor) {
+        const doctor = {
+          ...emptyProfile,
+          ...data.doctor,
+          id: data.doctor.id || data.doctor._id || "",
+          experience:
+            data.doctor.experience ?? "",
+        };
+
+        setProfile(doctor);
+
+        localStorage.setItem(
+          "docniva-doctor-profile",
+          JSON.stringify(doctor)
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Load doctor profile error:",
+        error
+      );
+
+      setError(
+        "Unable to connect to backend."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -47,227 +111,280 @@ function DoctorProfile() {
       ...prev,
       [name]: value,
     }));
+
+    setSaved(false);
+    setError("");
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
-    localStorage.setItem(
-      "docniva-doctor-profile",
-      JSON.stringify(profile)
+    setSaved(false);
+    setError("");
+
+    if (
+      !profile.name.trim() ||
+      !profile.phone.trim() ||
+      !profile.qualification.trim() ||
+      !profile.specialization.trim() ||
+      profile.experience === ""
+    ) {
+      setError(
+        "Please fill all required fields."
+      );
+      return;
+    }
+
+    const experienceNumber = Number(
+      profile.experience
     );
 
-    setSaved(true);
+    if (
+      Number.isNaN(experienceNumber) ||
+      experienceNumber < 0
+    ) {
+      setError(
+        "Experience must be a valid number."
+      );
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const token = localStorage.getItem(
+        "docniva-doctor-token"
+      );
+
+      if (!token) {
+        setError(
+          "Doctor login required. Please login again."
+        );
+        return;
+      }
+
+      const response = await fetch(
+        `${API_URL}/doctors/profile`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: profile.name.trim(),
+            phone: profile.phone.trim(),
+            qualification:
+              profile.qualification.trim(),
+            specialization:
+              profile.specialization.trim(),
+            experience: experienceNumber,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      console.log(
+        "UPDATE DOCTOR PROFILE:",
+        data
+      );
+
+      if (!response.ok) {
+        setError(
+          data.message ||
+            "Unable to update profile."
+        );
+        return;
+      }
+
+      if (data.success && data.doctor) {
+        const updatedProfile = {
+          ...emptyProfile,
+          ...data.doctor,
+          id:
+            data.doctor.id ||
+            data.doctor._id ||
+            profile.id,
+          experience:
+            data.doctor.experience ?? "",
+        };
+
+        setProfile(updatedProfile);
+
+        localStorage.setItem(
+          "docniva-doctor-profile",
+          JSON.stringify(updatedProfile)
+        );
+
+        setSaved(true);
+      }
+    } catch (error) {
+      console.error(
+        "Update doctor profile error:",
+        error
+      );
+
+      setError(
+        "Unable to connect to backend."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleReset = () => {
-    setProfile(defaultProfile);
-    localStorage.setItem(
-      "docniva-doctor-profile",
-      JSON.stringify(defaultProfile)
+  if (loading) {
+    return (
+      <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-10 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl">
+          <Card className="p-8 text-center">
+            <p className="text-[var(--text-secondary)]">
+              Loading profile...
+            </p>
+          </Card>
+        </div>
+      </main>
     );
-    setSaved(true);
-  };
+  }
 
   return (
     <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-4xl">
 
-        {/* Back */}
         <button
           type="button"
-          onClick={() => navigate("/doctor/dashboard")}
+          onClick={() =>
+            navigate("/doctor/dashboard")
+          }
           className="mb-6 text-sm font-medium text-[var(--primary)] hover:underline"
         >
           ← Back to Dashboard
         </button>
 
-        {/* Header */}
         <div className="mb-8">
           <p className="font-semibold text-[var(--primary)]">
             Doctor Profile
           </p>
 
           <h1 className="mt-2 text-2xl font-bold text-[var(--text-primary)] sm:text-3xl">
-            Manage Your Profile
+            Manage Profile
           </h1>
 
           <p className="mt-2 text-[var(--text-secondary)]">
-            Update your professional information and consultation details.
+            Update your professional information.
           </p>
         </div>
 
-        {/* Success Message */}
-        {saved && (
-          <div className="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
-            Profile saved successfully.
-          </div>
-        )}
-
-        {/* Profile Form */}
         <Card className="p-6 sm:p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
 
-            {/* Basic Information */}
-            <div>
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-                Basic Information
-              </h2>
+          <form onSubmit={handleSubmit}>
 
-              <div className="mt-5 grid gap-5 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
 
-                <Input
-                  label="Doctor Name"
-                  name="name"
-                  value={profile.name}
-                  onChange={handleChange}
-                  placeholder="Enter doctor name"
-                  required
-                />
-
-                <Input
-                  label="Specialization"
-                  name="specialization"
-                  value={profile.specialization}
-                  onChange={handleChange}
-                  placeholder="e.g. Cardiologist"
-                  required
-                />
-
-                <Input
-                  label="Qualification"
-                  name="qualification"
-                  value={profile.qualification}
-                  onChange={handleChange}
-                  placeholder="e.g. MBBS, MD"
-                  required
-                />
-
-                <Input
-                  label="Experience"
-                  name="experience"
-                  value={profile.experience}
-                  onChange={handleChange}
-                  placeholder="e.g. 8 years"
-                  required
-                />
-
-                <Input
-                  label="Location"
-                  name="location"
-                  value={profile.location}
-                  onChange={handleChange}
-                  placeholder="e.g. Agra"
-                  required
-                />
-
-                <Input
-                  label="Consultation Fee"
-                  name="fee"
-                  value={profile.fee}
-                  onChange={handleChange}
-                  placeholder="e.g. ₹800"
-                  required
-                />
-
-              </div>
-            </div>
-
-            {/* About */}
-            <div className="border-t border-[var(--border)] pt-6">
-              <label
-                htmlFor="about"
-                className="mb-2 block text-sm font-medium text-[var(--text-primary)]"
-              >
-                About Doctor
-              </label>
-
-              <textarea
-                id="about"
-                name="about"
-                rows="5"
-                value={profile.about}
+              <Input
+                label="Full Name"
+                name="name"
+                value={profile.name}
                 onChange={handleChange}
-                placeholder="Write something about your professional experience..."
-                className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--input-background)] px-4 py-3 text-sm text-[var(--input-text)] outline-none transition placeholder:text-[var(--input-placeholder)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20"
+                required
               />
+
+              <Input
+                label="Email"
+                name="email"
+                type="email"
+                value={profile.email}
+                disabled
+              />
+
+              <Input
+                label="Phone"
+                name="phone"
+                value={profile.phone}
+                onChange={handleChange}
+                required
+              />
+
+              <Input
+                label="Registration Number"
+                name="registrationNumber"
+                value={
+                  profile.registrationNumber
+                }
+                disabled
+              />
+
+              <Input
+                label="Qualification"
+                name="qualification"
+                value={profile.qualification}
+                onChange={handleChange}
+                required
+              />
+
+              <Input
+                label="Specialization"
+                name="specialization"
+                value={
+                  profile.specialization
+                }
+                onChange={handleChange}
+                required
+              />
+
+              <Input
+                label="Experience (Years)"
+                name="experience"
+                type="number"
+                min="0"
+                value={profile.experience}
+                onChange={handleChange}
+                required
+              />
+
             </div>
 
-            {/* Preview */}
-            <div className="border-t border-[var(--border)] pt-6">
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-                Profile Preview
-              </h2>
-
-              <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--soft-background)] p-5">
-
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-light)] text-3xl">
-                    👨‍⚕️
-                  </div>
-
-                  <div>
-                    <h3 className="text-xl font-bold text-[var(--text-primary)]">
-                      {profile.name}
-                    </h3>
-
-                    <p className="mt-1 font-medium text-[var(--primary)]">
-                      {profile.specialization}
-                    </p>
-
-                    <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                      {profile.qualification} · {profile.experience}
-                    </p>
-
-                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                      📍 {profile.location}
-                    </p>
-
-                    <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
-                      Consultation Fee: {profile.fee}
-                    </p>
-                  </div>
-
-                </div>
-
-                {profile.about && (
-                  <div className="mt-5 border-t border-[var(--border)] pt-4">
-                    <p className="text-sm leading-6 text-[var(--text-secondary)]">
-                      {profile.about}
-                    </p>
-                  </div>
-                )}
-
+            {error && (
+              <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
+                <p className="text-sm font-medium text-red-700">
+                  {error}
+                </p>
               </div>
-            </div>
+            )}
 
-            {/* Actions */}
-            <div className="flex flex-col gap-3 border-t border-[var(--border)] pt-6 sm:flex-row sm:justify-end">
+            {saved && !error && (
+              <div className="mt-5 rounded-xl border border-green-200 bg-green-50 p-4">
+                <p className="text-sm font-medium text-green-700">
+                  ✓ Profile updated successfully.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col gap-3 border-t border-[var(--border)] pt-6 sm:flex-row sm:justify-end">
 
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate("/doctor/dashboard")}
+                onClick={() =>
+                  navigate("/doctor/dashboard")
+                }
               >
                 Cancel
               </Button>
 
               <Button
-                type="button"
-                variant="outline"
-                onClick={handleReset}
+                type="submit"
+                disabled={saving}
               >
-                Reset
-              </Button>
-
-              <Button type="submit">
-                Save Changes
+                {saving
+                  ? "Saving..."
+                  : "Save Changes"}
               </Button>
 
             </div>
 
           </form>
+
         </Card>
 
       </div>
@@ -276,4 +393,3 @@ function DoctorProfile() {
 }
 
 export default DoctorProfile;
-
