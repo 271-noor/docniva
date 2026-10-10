@@ -1,68 +1,629 @@
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Button from "../../components/common/Button";
 import Card from "../../components/common/Card";
 
-const doctors = {
-  1: {
-    name: "Dr. Rozy",
-    specialization: "Cardiologist",
-    fee: "₹800",
-  },
-  2: {
-    name: "Dr. Noor",
-    specialization: "Dermatologist",
-    fee: "₹600",
-  },
-  3: {
-    name: "Dr. Priya Singh",
-    specialization: "General Physician",
-    fee: "₹500",
-  },
-};
+const API_URL = "http://localhost:5000";
 
-const timeSlots = [
-  { label: "10:00 AM", hour: 10, minute: 0 },
-  { label: "11:00 AM", hour: 11, minute: 0 },
-  { label: "12:00 PM", hour: 12, minute: 0 },
-  { label: "02:00 PM", hour: 14, minute: 0 },
-  { label: "04:00 PM", hour: 16, minute: 0 },
-  { label: "06:00 PM", hour: 18, minute: 0 },
+const dayNames = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
 ];
+
+async function getJsonResponse(response) {
+  const contentType =
+    response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    return await response.json();
+  }
+
+  const text = await response.text();
+
+  return {
+    success: false,
+    message:
+      text || `Request failed with status ${response.status}`,
+  };
+}
 
 function BookAppointment() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  const doctor = doctors[id];
+  const [doctor, setDoctor] = useState(null);
+  const [schedule, setSchedule] = useState(null);
 
   const [date, setDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [consultationType, setConsultationType] =
-    useState("Clinic Visit");
+    useState("");
   const [reason, setReason] = useState("");
+
+  const [loadingDoctor, setLoadingDoctor] =
+    useState(true);
+  const [loadingSchedule, setLoadingSchedule] =
+    useState(true);
+  const [loading, setLoading] = useState(false);
+
   const [error, setError] = useState("");
 
-  const isPastTime = (hour, minute) => {
-    if (!date) return false;
+  // ======================================================
+  // TODAY
+  // ======================================================
 
+  const todayString = useMemo(() => {
     const today = new Date();
-    const selectedDate = new Date(`${date}T00:00:00`);
 
-    const isToday =
-      selectedDate.getFullYear() === today.getFullYear() &&
-      selectedDate.getMonth() === today.getMonth() &&
-      selectedDate.getDate() === today.getDate();
+    const year = today.getFullYear();
 
-    if (!isToday) return false;
+    const month = String(
+      today.getMonth() + 1
+    ).padStart(2, "0");
+
+    const day = String(
+      today.getDate()
+    ).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  // ======================================================
+  // LOAD DOCTOR
+  // ======================================================
+
+  useEffect(() => {
+    const loadDoctor = async () => {
+      if (!id) {
+        setError("Doctor ID is missing.");
+        setLoadingDoctor(false);
+        return;
+      }
+
+      try {
+        setLoadingDoctor(true);
+        setError("");
+
+        const response = await fetch(
+          `${API_URL}/api/doctors`
+        );
+
+        const data = await getJsonResponse(response);
+
+        console.log(
+          "DOCTORS FROM BACKEND:",
+          data
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Unable to load doctors."
+          );
+        }
+
+        const doctors = Array.isArray(data)
+          ? data
+          : data.doctors || [];
+
+        const foundDoctor = doctors.find(
+          (item) =>
+            String(item._id || item.id) ===
+            String(id)
+        );
+
+        if (!foundDoctor) {
+          throw new Error(
+            "Doctor not found."
+          );
+        }
+
+        setDoctor(foundDoctor);
+      } catch (error) {
+        console.error(
+          "Load doctor error:",
+          error
+        );
+
+        setDoctor(null);
+
+        setError(
+          error.message ||
+            "Unable to load doctor."
+        );
+      } finally {
+        setLoadingDoctor(false);
+      }
+    };
+
+    loadDoctor();
+  }, [id]);
+
+  // ======================================================
+  // LOAD DOCTOR SCHEDULE
+  // ======================================================
+
+  useEffect(() => {
+    const loadDoctorSchedule = async () => {
+      if (!id) {
+        setLoadingSchedule(false);
+        return;
+      }
+
+      try {
+        setLoadingSchedule(true);
+
+        const response = await fetch(
+          `${API_URL}/api/doctors/schedule/doctor/${id}`
+        );
+
+        const data = await getJsonResponse(response);
+
+        console.log(
+          "DOCTOR SCHEDULE FROM BACKEND:",
+          data
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Unable to load doctor's schedule."
+          );
+        }
+
+        if (!data.schedule) {
+          throw new Error(
+            "Doctor schedule is not available."
+          );
+        }
+
+        setSchedule(data.schedule);
+
+        const types =
+          data.schedule.consultationTypes || [];
+
+        if (types.length > 0) {
+          setConsultationType(types[0]);
+        } else {
+          setConsultationType("");
+        }
+      } catch (error) {
+        console.error(
+          "Load doctor schedule error:",
+          error
+        );
+
+        setSchedule(null);
+
+        setError(
+          error.message ||
+            "Unable to load doctor's schedule."
+        );
+      } finally {
+        setLoadingSchedule(false);
+      }
+    };
+
+    loadDoctorSchedule();
+  }, [id]);
+
+  // ======================================================
+  // DATE EXCEPTION
+  // ======================================================
+
+  const selectedDateException = useMemo(() => {
+    if (!schedule || !date) {
+      return null;
+    }
+
+    const exceptions =
+      schedule.dateExceptions || [];
+
+    return (
+      exceptions.find(
+        (exception) =>
+          String(exception.date) ===
+          String(date)
+      ) || null
+    );
+  }, [schedule, date]);
+
+  // ======================================================
+  // SELECTED DAY
+  // ======================================================
+
+  const selectedDay = useMemo(() => {
+    if (!date) {
+      return "";
+    }
+
+    const [year, month, day] =
+      date.split("-").map(Number);
+
+    const selectedDate = new Date(
+      year,
+      month - 1,
+      day
+    );
+
+    return dayNames[
+      selectedDate.getDay()
+    ];
+  }, [date]);
+
+  // ======================================================
+  // DATE AVAILABILITY
+  // ======================================================
+
+  const dateAvailability = useMemo(() => {
+    if (!schedule || !date) {
+      return {
+        available: false,
+        reason: "",
+      };
+    }
+
+    // Date exception gets priority
+    if (selectedDateException) {
+      if (
+        selectedDateException.isAvailable ===
+        false
+      ) {
+        return {
+          available: false,
+          reason:
+            selectedDateException.reason ||
+            "Doctor is not available on this date.",
+        };
+      }
+
+      return {
+        available: true,
+        reason: "",
+      };
+    }
+
+    const availableDays =
+      schedule.availableDays || [];
+
+    if (
+      !availableDays.includes(
+        selectedDay
+      )
+    ) {
+      return {
+        available: false,
+        reason:
+          "Doctor is not available on this day.",
+      };
+    }
+
+    return {
+      available: true,
+      reason: "",
+    };
+  }, [
+    schedule,
+    date,
+    selectedDay,
+    selectedDateException,
+  ]);
+
+  // ======================================================
+  // AVAILABLE TIME SLOTS
+  // ======================================================
+
+  const availableTimeSlots = useMemo(() => {
+    if (
+      !schedule ||
+      !date ||
+      !dateAvailability.available
+    ) {
+      return [];
+    }
+
+    if (selectedDateException) {
+      return (
+        selectedDateException.timeSlots || []
+      );
+    }
+
+    return schedule.timeSlots || [];
+  }, [
+    schedule,
+    date,
+    dateAvailability.available,
+    selectedDateException,
+  ]);
+
+  // ======================================================
+  // CONSULTATION TYPES
+  // ======================================================
+
+  const consultationTypes = useMemo(() => {
+    if (!schedule) {
+      return [];
+    }
+
+    if (selectedDateException) {
+      return (
+        selectedDateException.consultationTypes ||
+        []
+      );
+    }
+
+    return (
+      schedule.consultationTypes || []
+    );
+  }, [
+    schedule,
+    selectedDateException,
+  ]);
+
+  // ======================================================
+  // DATE CHANGE
+  // ======================================================
+
+  const handleDateChange = (event) => {
+    const newDate = event.target.value;
+
+    setDate(newDate);
+    setSelectedTime("");
+    setError("");
+
+    const exception =
+      schedule?.dateExceptions?.find(
+        (item) =>
+          String(item.date) ===
+          String(newDate)
+      );
+
+    const types = exception
+      ? exception.consultationTypes || []
+      : schedule?.consultationTypes || [];
+
+    if (types.length > 0) {
+      setConsultationType(types[0]);
+    } else {
+      setConsultationType("");
+    }
+  };
+
+  // ======================================================
+  // PAST TIME
+  // ======================================================
+
+  const isPastTime = (timeString) => {
+    if (!date || !timeString) {
+      return false;
+    }
+
+    if (date !== todayString) {
+      return false;
+    }
+
+    const parts =
+      timeString.trim().split(" ");
+
+    if (parts.length !== 2) {
+      return false;
+    }
+
+    const time = parts[0];
+    const modifier =
+      parts[1].toUpperCase();
+
+    let [hours, minutes] =
+      time.split(":").map(Number);
+
+    if (
+      modifier === "PM" &&
+      hours !== 12
+    ) {
+      hours += 12;
+    }
+
+    if (
+      modifier === "AM" &&
+      hours === 12
+    ) {
+      hours = 0;
+    }
+
+    const now = new Date();
 
     const slotTime = new Date();
-    slotTime.setHours(hour, minute, 0, 0);
 
-    return slotTime <= today;
+    slotTime.setHours(
+      hours,
+      minutes,
+      0,
+      0
+    );
+
+    return slotTime <= now;
   };
+
+  // ======================================================
+  // SUBMIT APPOINTMENT
+  // ======================================================
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    setError("");
+
+    if (!date || !selectedTime) {
+      setError(
+        "Please select an appointment date and time."
+      );
+      return;
+    }
+
+    if (!dateAvailability.available) {
+      setError(
+        dateAvailability.reason ||
+          "Doctor is not available on this date."
+      );
+      return;
+    }
+
+    if (
+      !availableTimeSlots.includes(
+        selectedTime
+      )
+    ) {
+      setError(
+        "Selected time slot is not available."
+      );
+      return;
+    }
+
+    if (isPastTime(selectedTime)) {
+      setError(
+        "This time slot has already passed. Please select another time."
+      );
+
+      setSelectedTime("");
+      return;
+    }
+
+    if (
+      !consultationTypes.includes(
+        consultationType
+      )
+    ) {
+      setError(
+        "Selected consultation type is not available."
+      );
+      return;
+    }
+
+    const token = localStorage.getItem(
+      "docniva-token"
+    );
+
+    if (!token) {
+      setError(
+        "Please login as a patient before booking an appointment."
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      console.log(
+        "BOOKING APPOINTMENT:",
+        {
+          doctorId: id,
+          date,
+          selectedTime,
+          consultationType,
+          reason: reason.trim(),
+        }
+      );
+
+      const response = await fetch(
+        `${API_URL}/api/appointments`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Authorization:
+              `Bearer ${token}`,
+          },
+
+          body: JSON.stringify({
+            doctorId: id,
+            date,
+            selectedTime,
+            consultationType,
+            reason: reason.trim(),
+          }),
+        }
+      );
+
+      const data =
+        await getJsonResponse(response);
+
+      console.log(
+        "CREATE APPOINTMENT RESPONSE:",
+        data
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Appointment booking failed."
+        );
+      }
+
+      if (!data.appointment) {
+        throw new Error(
+          "Appointment was created but confirmation data was not returned."
+        );
+      }
+
+      // ==================================================
+      // SUCCESS
+      // ==================================================
+
+      navigate(
+        "/patient/appointment-confirmed",
+        {
+          state: data.appointment,
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Appointment booking error:",
+        error
+      );
+
+      setError(
+        error.message ||
+          "Unable to connect to the server."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ======================================================
+  // LOADING
+  // ======================================================
+
+  if (
+    loadingDoctor ||
+    loadingSchedule
+  ) {
+    return (
+      <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-10">
+        <div className="mx-auto max-w-4xl">
+          <Card className="p-8 text-center">
+            <p className="text-[var(--text-secondary)]">
+              Loading doctor details...
+            </p>
+          </Card>
+        </div>
+      </main>
+    );
+  }
+
+  // ======================================================
+  // DOCTOR NOT FOUND
+  // ======================================================
 
   if (!doctor) {
     return (
@@ -73,12 +634,17 @@ function BookAppointment() {
           </h1>
 
           <p className="mt-3 text-[var(--text-secondary)]">
-            We couldn't find the doctor you're trying to book.
+            {error ||
+              "We couldn't find the doctor you're trying to book."}
           </p>
 
           <Button
             className="mt-6"
-            onClick={() => navigate("/patient/find-doctor")}
+            onClick={() =>
+              navigate(
+                "/patient/find-doctor"
+              )
+            }
           >
             Back to Doctors
           </Button>
@@ -87,123 +653,50 @@ function BookAppointment() {
     );
   }
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
+  // ======================================================
+  // DOCTOR DATA
+  // ======================================================
 
-    setError("");
+  const doctorName =
+    doctor.name ||
+    doctor.fullName ||
+    `Dr. ${doctor.firstName || ""} ${
+      doctor.lastName || ""
+    }`.trim() ||
+    "Doctor";
 
-    if (!date || !selectedTime) {
-      setError("Please select an appointment date and time.");
-      return;
-    }
+  const specialization =
+    doctor.specialization ||
+    doctor.speciality ||
+    doctor.specialty ||
+    "Doctor";
 
-    /*
-     * Get currently logged-in patient.
-     *
-     * PatientLogin / PatientRegister save the current
-     * patient inside "docniva-current-patient".
-     */
-    const savedPatient = localStorage.getItem(
-      "docniva-current-patient"
-    );
+  const fee =
+    doctor.consultationFee ??
+    doctor.fee ??
+    doctor.consultation_fee ??
+    0;
 
-    if (!savedPatient) {
-      setError(
-        "Please login as a patient before booking an appointment."
-      );
-      return;
-    }
-
-    let patient;
-
-    try {
-      const parsedPatient = JSON.parse(savedPatient);
-
-      patient = {
-        id: parsedPatient.id || "",
-        name:
-          parsedPatient.name ||
-          parsedPatient.fullName ||
-          "Patient",
-        email:
-          parsedPatient.email ||
-          "Email not available",
-        mobile:
-          parsedPatient.mobile ||
-          "",
-      };
-    } catch (error) {
-      console.error(
-        "Invalid patient data:",
-        error
-      );
-
-      setError(
-        "Patient information could not be loaded. Please login again."
-      );
-      return;
-    }
-
-    /*
-     * Appointment starts as PENDING.
-     *
-     * Doctor will Accept or Reject it later.
-     */
-    const appointment = {
-      id: Date.now().toString(),
-
-      patient,
-
-      doctor: {
-        name: doctor.name,
-        specialization: doctor.specialization,
-        fee: doctor.fee,
-      },
-
-      date,
-      selectedTime,
-      consultationType,
-      reason: reason.trim(),
-
-      status: "pending",
-
-      createdAt: new Date().toISOString(),
-    };
-
-    /*
-     * Save appointment locally.
-     *
-     * Backend will replace this later.
-     */
-    localStorage.setItem(
-      "docniva-appointment",
-      JSON.stringify(appointment)
-    );
-
-    /*
-     * Go to confirmation page.
-     */
-    navigate("/patient/appointment-confirmed", {
-      state: appointment,
-    });
-  };
+  // ======================================================
+  // UI
+  // ======================================================
 
   return (
     <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-4xl">
 
-        {/* Back */}
         <button
           type="button"
           onClick={() =>
-            navigate(`/patient/doctor/${id}`)
+            navigate(
+              `/patient/doctor/${id}`
+            )
           }
           className="mb-6 text-sm font-medium text-[var(--primary)] hover:underline"
         >
           ← Back to Doctor
         </button>
 
-        {/* Header */}
         <div className="mb-8">
           <p className="font-semibold text-[var(--primary)]">
             Appointment
@@ -218,16 +711,27 @@ function BookAppointment() {
           </p>
         </div>
 
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
+            {error}
+          </div>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
 
-          {/* Booking Form */}
+          {/* ==================================================
+              FORM
+          ================================================== */}
+
           <Card className="p-6 sm:p-8">
+
             <form
               onSubmit={handleSubmit}
               className="space-y-7"
             >
 
-              {/* Doctor */}
+              {/* DOCTOR */}
+
               <div>
                 <p className="text-sm font-medium text-[var(--text-secondary)]">
                   Doctor
@@ -235,16 +739,17 @@ function BookAppointment() {
 
                 <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--soft-background)] p-4">
                   <h2 className="font-semibold text-[var(--text-primary)]">
-                    {doctor.name}
+                    {doctorName}
                   </h2>
 
                   <p className="mt-1 text-sm text-[var(--primary)]">
-                    {doctor.specialization}
+                    {specialization}
                   </p>
                 </div>
               </div>
 
-              {/* Date */}
+              {/* DATE */}
+
               <div>
                 <label
                   htmlFor="appointment-date"
@@ -257,118 +762,162 @@ function BookAppointment() {
                   id="appointment-date"
                   type="date"
                   value={date}
-                  min={
-                    new Date()
-                      .toISOString()
-                      .split("T")[0]
-                  }
-                  onChange={(event) => {
-                    setDate(event.target.value);
-                    setSelectedTime("");
-                    setError("");
-                  }}
+                  min={todayString}
+                  onChange={handleDateChange}
                   required
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] px-4 py-3 text-sm text-[var(--input-text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20"
                 />
 
-                <p className="mt-2 text-xs text-[var(--text-muted)]">
-                  Select a convenient date for your appointment.
-                </p>
+                {!date && (
+                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                    Select a date to see available time slots.
+                  </p>
+                )}
+
+                {date && (
+                  <div className="mt-3 rounded-xl bg-[var(--soft-background)] p-3">
+
+                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                      {selectedDay}
+                    </p>
+
+                    {!dateAvailability.available && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {dateAvailability.reason}
+                      </p>
+                    )}
+
+                    {dateAvailability.available && (
+                      <p className="mt-1 text-xs text-green-600">
+                        Doctor is available on this date.
+                      </p>
+                    )}
+
+                    {selectedDateException?.reason && (
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        Note:{" "}
+                        {selectedDateException.reason}
+                      </p>
+                    )}
+
+                  </div>
+                )}
               </div>
 
-              {/* Time Slots */}
+              {/* TIME */}
+
               <div>
                 <p className="mb-3 text-sm font-medium text-[var(--text-primary)]">
                   Select Time
                 </p>
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {timeSlots.map((slot) => {
-                    const disabled = isPastTime(
-                      slot.hour,
-                      slot.minute
-                    );
+                {!date ? (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--soft-background)] p-4">
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      Please select a date first.
+                    </p>
+                  </div>
+                ) : !dateAvailability.available ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      No appointments are available for this date.
+                    </p>
+                  </div>
+                ) : availableTimeSlots.length === 0 ? (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--soft-background)] p-4">
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      No time slots available for this date.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
 
-                    return (
-                      <button
-                        key={slot.label}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => {
-                          setSelectedTime(slot.label);
-                          setError("");
-                        }}
-                        className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
-                          disabled
-                            ? "cursor-not-allowed border-[var(--border)] bg-gray-100 text-gray-400 opacity-60 dark:bg-gray-800 dark:text-gray-500"
-                            : selectedTime ===
-                              slot.label
-                            ? "border-[var(--primary)] bg-[var(--primary)] text-white"
-                            : "border-[var(--border)] bg-[var(--card)] text-[var(--text-primary)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
-                        }`}
-                      >
-                        {slot.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                    {availableTimeSlots.map(
+                      (slot) => {
+                        const disabled =
+                          isPastTime(slot);
+
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => {
+                              setSelectedTime(slot);
+                              setError("");
+                            }}
+                            className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
+                              disabled
+                                ? "cursor-not-allowed border-[var(--border)] bg-gray-100 text-gray-400 opacity-60 dark:bg-gray-800 dark:text-gray-500"
+                                : selectedTime === slot
+                                ? "border-[var(--primary)] bg-[var(--primary)] text-white"
+                                : "border-[var(--border)] bg-[var(--card)] text-[var(--text-primary)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
+                            }`}
+                          >
+                            {slot}
+                          </button>
+                        );
+                      }
+                    )}
+
+                  </div>
+                )}
+
               </div>
 
-              {/* Consultation Type */}
+              {/* CONSULTATION */}
+
               <div>
                 <p className="mb-3 text-sm font-medium text-[var(--text-primary)]">
                   Consultation Type
                 </p>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                {consultationTypes.length === 0 ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      No consultation type is available for this date.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setConsultationType(
-                        "Clinic Visit"
+                    {consultationTypes.map(
+                      (type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => {
+                            setConsultationType(type);
+                            setError("");
+                          }}
+                          className={`rounded-xl border p-4 text-left transition ${
+                            consultationType === type
+                              ? "border-[var(--primary)] bg-[var(--primary-light)]"
+                              : "border-[var(--border)] bg-[var(--card)]"
+                          }`}
+                        >
+                          <p className="font-medium text-[var(--text-primary)]">
+                            {type === "Online"
+                              ? "Online Consultation"
+                              : "Clinic Visit"}
+                          </p>
+
+                          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                            {type === "Online"
+                              ? "Consult through an online appointment."
+                              : "Visit the doctor's clinic."}
+                          </p>
+                        </button>
                       )
-                    }
-                    className={`rounded-xl border p-4 text-left transition ${
-                      consultationType ===
-                      "Clinic Visit"
-                        ? "border-[var(--primary)] bg-[var(--primary-light)]"
-                        : "border-[var(--border)] bg-[var(--card)]"
-                    }`}
-                  >
-                    <p className="font-medium text-[var(--text-primary)]">
-                      Clinic Visit
-                    </p>
+                    )}
 
-                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                      Visit the doctor's clinic.
-                    </p>
-                  </button>
+                  </div>
+                )}
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setConsultationType("Online")
-                    }
-                    className={`rounded-xl border p-4 text-left transition ${
-                      consultationType === "Online"
-                        ? "border-[var(--primary)] bg-[var(--primary-light)]"
-                        : "border-[var(--border)] bg-[var(--card)]"
-                    }`}
-                  >
-                    <p className="font-medium text-[var(--text-primary)]">
-                      Online Consultation
-                    </p>
-
-                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                      Consult through an online appointment.
-                    </p>
-                  </button>
-
-                </div>
               </div>
 
-              {/* Reason */}
+              {/* REASON */}
+
               <div>
                 <label
                   htmlFor="reason"
@@ -389,27 +938,34 @@ function BookAppointment() {
                 />
               </div>
 
-              {/* Error */}
-              {error && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
-                  {error}
-                </div>
-              )}
+              {/* SUBMIT */}
 
-              {/* Submit */}
               <Button
                 type="submit"
                 size="lg"
                 className="w-full"
-                disabled={!date || !selectedTime}
+                disabled={
+                  !date ||
+                  !selectedTime ||
+                  !dateAvailability.available ||
+                  consultationTypes.length === 0 ||
+                  !consultationType ||
+                  loading
+                }
               >
-                Send Appointment Request
+                {loading
+                  ? "Sending Request..."
+                  : "Send Appointment Request"}
               </Button>
 
             </form>
+
           </Card>
 
-          {/* Summary */}
+          {/* ==================================================
+              SUMMARY
+          ================================================== */}
+
           <div>
             <Card className="p-6 lg:sticky lg:top-24">
 
@@ -425,7 +981,17 @@ function BookAppointment() {
                   </p>
 
                   <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
-                    {doctor.name}
+                    {doctorName}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Specialization
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
+                    {specialization}
                   </p>
                 </div>
 
@@ -436,6 +1002,16 @@ function BookAppointment() {
 
                   <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
                     {date || "Not selected"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Day
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
+                    {selectedDay || "Not selected"}
                   </p>
                 </div>
 
@@ -455,20 +1031,26 @@ function BookAppointment() {
                   </p>
 
                   <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
-                    {consultationType}
+                    {consultationType || "Not selected"}
                   </p>
                 </div>
 
                 <div className="border-t border-[var(--border)] pt-4">
+
                   <div className="flex items-center justify-between">
+
                     <span className="text-sm text-[var(--text-secondary)]">
                       Consultation Fee
                     </span>
 
                     <span className="font-bold text-[var(--text-primary)]">
-                      {doctor.fee}
+                      {fee
+                        ? `₹${fee}`
+                        : "Not specified"}
                     </span>
+
                   </div>
+
                 </div>
 
               </div>

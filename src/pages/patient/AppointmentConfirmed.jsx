@@ -37,7 +37,36 @@ function AppointmentConfirmed() {
     date,
     selectedTime,
     consultationType,
+    status,
   } = state;
+
+  const getBadgeStatus = (appointmentStatus) => {
+    if (appointmentStatus === "confirmed") {
+      return "confirmed";
+    }
+
+    if (appointmentStatus === "rejected") {
+      return "danger";
+    }
+
+    return "pending";
+  };
+
+  const getStatusText = (appointmentStatus) => {
+    if (appointmentStatus === "confirmed") {
+      return "Confirmed";
+    }
+
+    if (appointmentStatus === "rejected") {
+      return "Rejected";
+    }
+
+    if (appointmentStatus === "cancelled") {
+      return "Cancelled";
+    }
+
+    return "Pending";
+  };
 
   return (
     <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-10 sm:px-6 lg:px-8">
@@ -51,11 +80,11 @@ function AppointmentConfirmed() {
           </div>
 
           <p className="mt-5 font-semibold text-[var(--primary)]">
-            Appointment Confirmed
+            Appointment Request
           </p>
 
           <h1 className="mt-2 text-2xl font-bold text-[var(--text-primary)] sm:text-3xl">
-            Your appointment is booked!
+            Your appointment request is submitted!
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
@@ -66,23 +95,25 @@ function AppointmentConfirmed() {
           <div className="mt-8 rounded-2xl border border-[var(--border)] bg-[var(--soft-background)] p-5 text-left">
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
               <div>
                 <p className="text-xs text-[var(--text-muted)]">
                   Doctor
                 </p>
 
                 <h2 className="mt-1 text-lg font-bold text-[var(--text-primary)]">
-                  {doctor.name}
+                  {doctor?.name || "Doctor"}
                 </h2>
 
                 <p className="mt-1 text-sm text-[var(--primary)]">
-                  {doctor.specialization}
+                  {doctor?.specialization || "Specialist"}
                 </p>
               </div>
 
-              <Badge status="confirmed">
-                Confirmed
+              <Badge status={getBadgeStatus(status)}>
+                {getStatusText(status)}
               </Badge>
+
             </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -123,11 +154,25 @@ function AppointmentConfirmed() {
                 </p>
 
                 <p className="mt-1 font-bold text-[var(--text-primary)]">
-                  {doctor.fee}
+                  {doctor?.fee || "Not available"}
                 </p>
               </div>
 
             </div>
+
+          </div>
+
+          {/* Status Message */}
+          <div className="mt-6 rounded-xl bg-[var(--soft-background)] p-4">
+            <p className="text-sm text-[var(--text-secondary)]">
+              {status === "confirmed"
+                ? "Your appointment has been accepted by the doctor."
+                : status === "rejected"
+                ? "Your appointment request was rejected by the doctor."
+                : status === "cancelled"
+                ? "This appointment has been cancelled."
+                : "Your appointment request is waiting for the doctor's confirmation."}
+            </p>
           </div>
 
           {/* Actions */}
