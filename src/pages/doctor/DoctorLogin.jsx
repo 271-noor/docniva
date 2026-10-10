@@ -1,15 +1,120 @@
 
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 import Button from "../../components/common/Button";
 import Card from "../../components/common/Card";
 import Input from "../../components/common/Input";
 
 function DoctorLogin() {
-  const handleSubmit = (event) => {
+  const navigate = useNavigate();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
-    // Backend authentication will be connected here later.
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(
+        "http://localhost:5000/api/doctors/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: email.trim().toLowerCase(),
+            password,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      console.log("DOCTOR LOGIN RESPONSE:", data);
+
+      if (!response.ok) {
+        setError(
+          data.message || "Invalid email or password."
+        );
+        return;
+      }
+
+      if (!data.doctor) {
+        setError(
+          "Doctor profile was not received from server."
+        );
+
+        console.error(
+          "Doctor data missing:",
+          data
+        );
+
+        return;
+      }
+
+      // ========================================
+      // SAVE DOCTOR TOKEN
+      // ========================================
+
+      localStorage.setItem(
+        "docniva-doctor-token",
+        data.token
+      );
+
+      // ========================================
+      // SAVE DOCTOR ID
+      // ========================================
+
+      localStorage.setItem(
+        "docniva-doctor-id",
+        data.doctor.id
+      );
+
+      // ========================================
+      // SAVE DOCTOR PROFILE
+      // ========================================
+
+      localStorage.setItem(
+        "docniva-doctor-profile",
+        JSON.stringify(data.doctor)
+      );
+
+      console.log(
+        "DOCTOR ID SAVED:",
+        data.doctor.id
+      );
+
+      console.log(
+        "DOCTOR PROFILE SAVED:",
+        data.doctor
+      );
+
+      // ========================================
+      // GO TO DASHBOARD
+      // ========================================
+
+      navigate("/doctor/dashboard");
+
+    } catch (error) {
+      console.error(
+        "Doctor login error:",
+        error
+      );
+
+      setError(
+        "Unable to connect to the server. Please make sure the backend is running."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -18,8 +123,8 @@ function DoctorLogin() {
 
         <Card className="w-full p-6 sm:p-8">
 
-          {/* Header */}
           <div className="text-center">
+
             <span className="inline-block font-semibold text-[var(--primary)]">
               DocNiva
             </span>
@@ -31,16 +136,21 @@ function DoctorLogin() {
             <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
               Access your professional account.
             </p>
+
           </div>
 
-          {/* Login Form */}
           <form
             className="mt-8 space-y-5"
             onSubmit={handleSubmit}
           >
+
             <Input
               label="Email Address"
               type="email"
+              value={email}
+              onChange={(event) =>
+                setEmail(event.target.value)
+              }
               placeholder="doctor@example.com"
               required
             />
@@ -48,20 +158,29 @@ function DoctorLogin() {
             <Input
               label="Password"
               type="password"
+              value={password}
+              onChange={(event) =>
+                setPassword(event.target.value)
+              }
               placeholder="Enter your password"
               required
             />
 
-            {/* Remember + Forgot */}
             <div className="flex items-center justify-between gap-3 text-sm">
 
               <label className="flex cursor-pointer items-center gap-2 text-[var(--text-secondary)]">
+
                 <input
                   type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) =>
+                    setRememberMe(event.target.checked)
+                  }
                   className="h-4 w-4 accent-[var(--primary)]"
                 />
 
                 <span>Remember me</span>
+
               </label>
 
               <Link
@@ -73,17 +192,23 @@ function DoctorLogin() {
 
             </div>
 
-            {/* Login Button */}
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
+                {error}
+              </div>
+            )}
+
             <Button
               type="submit"
               className="w-full"
               size="lg"
+              disabled={loading}
             >
-              Login
+              {loading ? "Logging in..." : "Login"}
             </Button>
+
           </form>
 
-          {/* Register */}
           <p className="mt-6 text-center text-sm text-[var(--text-secondary)]">
             Don't have an account?{" "}
 
