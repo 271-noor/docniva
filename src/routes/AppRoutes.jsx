@@ -87,6 +87,8 @@ function AppRoutes() {
 
       <Route
         path="/doctor/forgot-password"
+
+        
         element={<DoctorForgotPassword />}
       />
 
