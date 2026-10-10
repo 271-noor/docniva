@@ -18,6 +18,7 @@ function PatientRegister() {
   });
 
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -30,65 +31,78 @@ function PatientRegister() {
     setError("");
   };
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
+ const handleSubmit = async (event) => {
+  event.preventDefault();
 
-    const {
-      name,
-      email,
-      mobile,
-      password,
-      confirmPassword,
-    } = formData;
+  const {
+    name,
+    email,
+    mobile,
+    password,
+    confirmPassword,
+  } = formData;
 
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+  // Password match check
+  if (password !== confirmPassword) {
+    setError("Passwords do not match.");
+    return;
+  }
+
+  // Loading start
+  setLoading(true);
+  setError("");
+
+  try {
+    // Backend ko registration request bhej rahe hain
+    const response = await fetch(
+      "http://localhost:5000/api/patients/register",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        // Frontend ke mobile ko backend ke phone field me bhej rahe hain
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          phone: mobile.trim(),
+          password,
+        }),
+      }
+    );
+
+    // Backend response
+    const data = await response.json();
+
+    // Agar backend error bheje
+    if (!response.ok) {
+      setError(
+        data.message || "Registration failed. Please try again."
+      );
       return;
     }
 
-    const existingPatient = localStorage.getItem(
-      "docniva-patient"
+    // Registration successful
+    console.log("Patient registered:", data);
+
+    // Login page par redirect
+    navigate("/patient/login");
+
+  } catch (error) {
+    // Backend connect na ho paye
+    console.error("Registration error:", error);
+
+    setError(
+      "Unable to connect to the server. Please make sure the backend is running."
     );
-
-    if (existingPatient) {
-      try {
-        const parsedPatient = JSON.parse(existingPatient);
-
-        if (
-          parsedPatient.email?.toLowerCase() ===
-          email.toLowerCase()
-        ) {
-          setError(
-            "An account with this email already exists."
-          );
-          return;
-        }
-      } catch (error) {
-        console.error("Invalid patient data:", error);
-      }
-    }
-
-    const patient = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      mobile: mobile.trim(),
-      password,
-    };
-
-    localStorage.setItem(
-      "docniva-patient",
-      JSON.stringify(patient)
-    );
-
-    // Automatically log the patient in after registration.
-    localStorage.setItem(
-      "docniva-current-patient",
-      JSON.stringify(patient)
-    );
-
-    navigate("/patient/dashboard");
-  };
+  } finally {
+    // Loading stop
+    setLoading(false);
+  }
+};
+    
 
   return (
     <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-10 sm:px-6 sm:py-16 lg:px-8">
@@ -178,8 +192,9 @@ function PatientRegister() {
               type="submit"
               className="w-full"
               size="lg"
+               disabled={loading}
             >
-              Create Account
+              {loading ? "Creating Account..." : "Create Account"}
             </Button>
           </form>
 

@@ -14,68 +14,87 @@ function PatientLogin() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
+  // Login request ke time loading state
+  const [loading, setLoading] = useState(false);
 
-    setError("");
 
-    const savedPatient = localStorage.getItem(
-      "docniva-patient"
+const handleSubmit = async (event) => {
+  event.preventDefault();
+
+  setLoading(true);
+  setError("");
+
+  try {
+    // Backend ko login request bhej rahe hain
+    const response = await fetch(
+      "http://localhost:5000/api/patients/login",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
+      }
     );
 
-    if (!savedPatient) {
+    // Backend response
+    const data = await response.json();
+
+    // Agar backend error bheje
+    if (!response.ok) {
       setError(
-        "No patient account found. Please register first."
+        data.message || "Invalid email or password."
       );
       return;
     }
 
-    try {
-      const patient = JSON.parse(savedPatient);
+    // Login successful
+    console.log("Patient logged in:", data);
 
-      const emailMatches =
-        patient.email?.toLowerCase() ===
-        email.trim().toLowerCase();
+    // JWT token save kar rahe hain
+    localStorage.setItem(
+      "docniva-token",
+      data.token
+    );
 
-      const passwordMatches =
-        patient.password === password;
+    // Logged-in patient ka data save kar rahe hain
+    localStorage.setItem(
+      "docniva-current-patient",
+      JSON.stringify(data.patient)
+    );
 
-      if (!emailMatches || !passwordMatches) {
-        setError("Invalid email or password.");
-        return;
-      }
-
-      /*
-        Save currently logged-in patient.
-
-        BookAppointment.jsx will use this data
-        to show the real patient name.
-      */
+    // Remember me preference
+    if (rememberMe) {
       localStorage.setItem(
-        "docniva-current-patient",
-        JSON.stringify(patient)
+        "docniva-remember-me",
+        "true"
       );
-
-      if (rememberMe) {
-        localStorage.setItem(
-          "docniva-remember-me",
-          "true"
-        );
-      } else {
-        localStorage.removeItem(
-          "docniva-remember-me"
-        );
-      }
-
-      navigate("/patient/dashboard");
-    } catch (error) {
-      console.error("Invalid patient data:", error);
-
-      setError(
-        "Something went wrong. Please register again."
+    } else {
+      localStorage.removeItem(
+        "docniva-remember-me"
       );
     }
-  };
+
+    // Patient dashboard par redirect
+    navigate("/patient/dashboard");
+
+  } catch (error) {
+    console.error("Login error:", error);
+
+    setError(
+      "Unable to connect to the server. Please make sure the backend is running."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   return (
     <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-10 sm:px-6 sm:py-16 lg:px-8">
@@ -153,8 +172,9 @@ function PatientLogin() {
               type="submit"
               className="w-full"
               size="lg"
+              disabled={loading}
             >
-              Login
+              {loading ? "Logging in..." : "Login"}
             </Button>
           </form>
 
