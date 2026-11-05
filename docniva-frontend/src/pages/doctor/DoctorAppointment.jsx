@@ -344,7 +344,7 @@ function DoctorAppointments() {
                       </p>
 
                       <p className="mt-1 font-semibold text-[var(--primary)]">
-                        {appointment.selectedTime}
+                        {appointment.timeLabel || appointment.selectedTime}
                       </p>
 
                     </div>
