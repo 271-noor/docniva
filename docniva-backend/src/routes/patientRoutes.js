@@ -26,6 +26,8 @@ import {
   resetPasswordSchema,
 } from "../validators/authSchemas.js";
 
+import { updatePatientProfileSchema } from "../validators/profileSchemas.js";
+
 const router = express.Router();
 
 // ---------- AUTH ----------
@@ -41,7 +43,7 @@ router.get("/me", protect, patientOnly, getPatientMe);
 // ---------- DASHBOARD + PROFILE (ye aage ke step me badlenge) ----------
 router.get("/dashboard", protect, patientOnly, getPatientDashboard);
 router.get("/profile", protect, patientOnly, getPatientProfile);
-router.put("/profile", protect, patientOnly, updatePatientProfile);
+router.put("/profile", protect, patientOnly, validate({ body: updatePatientProfileSchema }), updatePatientProfile);
 
 // Appointment routes appointmentRoutes.js me hain.
 
