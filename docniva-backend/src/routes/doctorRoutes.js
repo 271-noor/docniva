@@ -1,159 +1,70 @@
-
 import express from "express";
 
 import {
   registerDoctor,
   loginDoctor,
+  logoutDoctor,
+  getDoctorMe,
+  forgotDoctorPassword,
+  resetDoctorPassword,
 } from "../controllers/auth/doctorAuthController.js";
-
-// ======================================================
-// DOCTOR DIRECTORY CONTROLLER
-// ======================================================
-
 import {
   getAllDoctors,
+  getDoctorById,
+  getDoctorSlots,
 } from "../controllers/doctor/doctorDirectoryController.js";
-
-// ======================================================
-// DOCTOR DASHBOARD CONTROLLER
-// ======================================================
-
-import {
-  getDoctorDashboard,
-} from "../controllers/doctor/doctorDashboardController.js";
-
-// ======================================================
-// DOCTOR PROFILE CONTROLLER
-// ======================================================
-
+import { getDoctorDashboard } from "../controllers/doctor/doctorDashboardController.js";
 import {
   getDoctorProfile,
   updateDoctorProfile,
 } from "../controllers/doctor/doctorProfileController.js";
-
-// ======================================================
-// DOCTOR APPOINTMENT CONTROLLER
-// ======================================================
-
 import {
   getDoctorAppointments,
   updateAppointmentStatus,
 } from "../controllers/doctor/doctorAppointmentController.js";
 
-// ======================================================
-// AUTH MIDDLEWARE
-// ======================================================
-
+import { protect, doctorOnly } from "../middleware/authMiddleware.js";
+import { validate } from "../middleware/validate.js";
 import {
-  protect,
-  doctorOnly,
-} from "../middleware/authMiddleware.js";
+  loginSchema,
+  doctorRegisterSchema,
+  emailOnlySchema,
+  resetPasswordSchema,
+} from "../validators/authSchemas.js";
+import {
+  doctorIdParams,
+  doctorListQuery,
+  slotsQuery,
+} from "../validators/bookingSchemas.js";
 
 const router = express.Router();
 
-// ======================================================
-// 1. DOCTOR AUTH
-// ======================================================
+// ---------- AUTH ----------
+router.post("/register", validate({ body: doctorRegisterSchema }), registerDoctor);
+router.post("/login", validate({ body: loginSchema }), loginDoctor);
+router.post("/logout", logoutDoctor);
+router.post("/forgot-password", validate({ body: emailOnlySchema }), forgotDoctorPassword);
+router.post("/reset-password", validate({ body: resetPasswordSchema }), resetDoctorPassword);
+router.get("/me", protect, doctorOnly, getDoctorMe);
 
-// POST /api/doctors/register
-router.post(
-  "/register",
-  registerDoctor
-);
+// ---------- PUBLIC DIRECTORY ----------
+router.get("/", validate({ query: doctorListQuery }), getAllDoctors);
 
-// POST /api/doctors/login
-router.post(
-  "/login",
-  loginDoctor
-);
+// ---------- DOCTOR (login zaroori) ----------
+router.get("/dashboard", protect, doctorOnly, getDoctorDashboard);
+router.get("/profile", protect, doctorOnly, getDoctorProfile);
+router.put("/profile", protect, doctorOnly, updateDoctorProfile);
+router.get("/appointments", protect, doctorOnly, getDoctorAppointments);
+router.patch("/appointments/:appointmentId/status", protect, doctorOnly, updateAppointmentStatus);
 
-// ======================================================
-// 2. DOCTOR DIRECTORY
-// ======================================================
-
-// GET /api/doctors
-//
-// Public route.
-// Patient doctors ki list dekh sakta hai.
-
+// ---------- PUBLIC DOCTOR (hamesha sabse neeche, "/:doctorId" baaki paths ko na pakde) ----------
 router.get(
-  "/",
-  getAllDoctors
+  "/:doctorId/slots",
+  validate({ params: doctorIdParams, query: slotsQuery }),
+  getDoctorSlots
 );
+router.get("/:doctorId", validate({ params: doctorIdParams }), getDoctorById);
 
-// ======================================================
-// 3. DOCTOR DASHBOARD
-// ======================================================
-
-// GET /api/doctors/dashboard
-
-router.get(
-  "/dashboard",
-  protect,
-  doctorOnly,
-  getDoctorDashboard
-);
-
-// ======================================================
-// 4. DOCTOR PROFILE
-// ======================================================
-
-// GET /api/doctors/profile
-
-router.get(
-  "/profile",
-  protect,
-  doctorOnly,
-  getDoctorProfile
-);
-
-// PUT /api/doctors/profile
-
-router.put(
-  "/profile",
-  protect,
-  doctorOnly,
-  updateDoctorProfile
-);
-
-// ======================================================
-// 5. DOCTOR APPOINTMENTS
-// ======================================================
-
-// GET /api/doctors/appointments
-
-router.get(
-  "/appointments",
-  protect,
-  doctorOnly,
-  getDoctorAppointments
-);
-
-// PATCH /api/doctors/appointments/:appointmentId/status
-
-router.patch(
-  "/appointments/:appointmentId/status",
-  protect,
-  doctorOnly,
-  updateAppointmentStatus
-);
-
-// ======================================================
-// 6. DOCTOR SCHEDULE
-// ======================================================
-//
-// IMPORTANT:
-//
-// Doctor schedule ke routes alag file mein hain:
-//
-// doctorScheduleRoutes.js
-//
-// Is file mein schedule routes add nahi karne.
-// ======================================================
-
-// ======================================================
-// EXPORT
-// ======================================================
+// Schedule routes doctorScheduleRoutes.js me hain.
 
 export default router;
-

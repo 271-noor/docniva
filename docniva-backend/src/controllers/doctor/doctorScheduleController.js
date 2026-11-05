@@ -1,488 +1,113 @@
-
 import DoctorSchedule from "../../models/DoctorSchedule.js";
-import Doctor from "../../models/Doctor.js";
 
-// ======================================================
-// GET DOCTOR SCHEDULE
-// ======================================================
-// Logged-in doctor apna schedule dekh sakta hai.
-//
+const DEFAULT_SCHEDULE = {
+  weekly: [],
+  slotDurationMinutes: 30,
+  consultationTypes: ["Clinic Visit"],
+  maxAdvanceDays: 30,
+  minNoticeMinutes: 60,
+  dateExceptions: [],
+};
+
+const loadSchedule = (doctorId) =>
+  DoctorSchedule.findOne({ doctor: doctorId }).lean();
+
 // GET /api/doctors/schedule
-// ======================================================
-
 export const getDoctorSchedule = async (req, res) => {
-  try {
-    const doctorId = req.user.id;
+  const schedule = await loadSchedule(req.user.id);
 
-    const schedule = await DoctorSchedule.findOne({
-      doctor: doctorId,
-    });
-
-    // Schedule abhi create nahi hua
-    if (!schedule) {
-      return res.status(200).json({
-        success: true,
-        schedule: {
-          doctor: doctorId,
-          availableDays: [],
-          timeSlots: [],
-          consultationTypes: ["Clinic Visit"],
-        },
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      schedule,
-    });
-  } catch (error) {
-    console.error(
-      "Get doctor schedule error:",
-      error.message
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
+  return res.status(200).json({
+    success: true,
+    schedule: schedule || { doctor: req.user.id, ...DEFAULT_SCHEDULE },
+  });
 };
 
-
-
-// ======================================================
-// GET SPECIFIC DOCTOR SCHEDULE FOR PATIENT
-// ======================================================
-//
-// GET /api/doctors/:doctorId/schedule
-//
-// Patient kisi specific doctor ka available schedule
-// dekh sakta hai.
-//
-// ======================================================
-
-export const getDoctorScheduleForPatient = async (
-  req,
-  res
-) => {
-  try {
-    const { doctorId } = req.params;
-
-    // --------------------------------------------------
-    // CHECK DOCTOR
-    // --------------------------------------------------
-
-    const doctor = await Doctor.findById(
-      doctorId
-    );
-
-    if (!doctor) {
-      return res.status(404).json({
-        success: false,
-        message: "Doctor not found",
-      });
-    }
-
-    // --------------------------------------------------
-    // FIND SCHEDULE
-    // --------------------------------------------------
-
-    const schedule =
-      await DoctorSchedule.findOne({
-        doctor: doctorId,
-      });
-
-    // --------------------------------------------------
-    // NO SCHEDULE
-    // --------------------------------------------------
-
-    if (!schedule) {
-      return res.status(200).json({
-        success: true,
-        schedule: {
-          doctor: doctorId,
-          availableDays: [],
-          timeSlots: [],
-          consultationTypes: [],
-          dateExceptions: [],
-        },
-      });
-    }
-
-    // --------------------------------------------------
-    // RESPONSE
-    // --------------------------------------------------
-
-    return res.status(200).json({
-      success: true,
-
-      schedule: {
-        doctor: schedule.doctor,
-        availableDays:
-          schedule.availableDays || [],
-
-        timeSlots:
-          schedule.timeSlots || [],
-
-        consultationTypes:
-          schedule.consultationTypes || [],
-
-        dateExceptions:
-          schedule.dateExceptions || [],
-      },
-    });
-  } catch (error) {
-    console.error(
-      "Get doctor schedule for patient error:",
-      error.message
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-
-
-
-// ======================================================
-// UPDATE DOCTOR SCHEDULE
-// ======================================================
-// Doctor apna available schedule set/update kar sakta hai.
-//
 // PUT /api/doctors/schedule
-//
-// Body:
-//
-// {
-//   availableDays: ["Monday", "Tuesday"],
-//   timeSlots: ["09:00 AM", "10:00 AM"],
-//   consultationTypes: ["Clinic Visit", "Online"]
-// }
-// ======================================================
-
 export const updateDoctorSchedule = async (req, res) => {
-  try {
-    const doctorId = req.user.id;
+  const data = req.validated.body;
 
-    const {
-      availableDays,
-      timeSlots,
-      consultationTypes,
-    } = req.body;
-
-    // --------------------------------------------------
-    // CHECK DOCTOR
-    // --------------------------------------------------
-
-    const doctor = await Doctor.findById(doctorId);
-
-    if (!doctor) {
-      return res.status(404).json({
-        success: false,
-        message: "Doctor not found",
-      });
+  const schedule = await DoctorSchedule.findOneAndUpdate(
+    { doctor: req.user.id },
+    { $set: data },
+    {
+      new: true,
+      upsert: true,
+      runValidators: true,
+      setDefaultsOnInsert: true,
     }
+  ).lean();
 
-    // --------------------------------------------------
-    // VALIDATE ARRAYS
-    // --------------------------------------------------
-
-    if (
-      !Array.isArray(availableDays) ||
-      !Array.isArray(timeSlots) ||
-      !Array.isArray(consultationTypes)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "availableDays, timeSlots and consultationTypes must be arrays",
-      });
-    }
-
-    // --------------------------------------------------
-    // VALIDATE DAYS
-    // --------------------------------------------------
-
-    const validDays = [
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-      "Sunday",
-    ];
-
-    const invalidDays = availableDays.filter(
-      (day) => !validDays.includes(day)
-    );
-
-    if (invalidDays.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid day provided",
-        invalidDays,
-      });
-    }
-
-    // --------------------------------------------------
-    // VALIDATE CONSULTATION TYPES
-    // --------------------------------------------------
-
-    const validConsultationTypes = [
-      "Clinic Visit",
-      "Online",
-    ];
-
-    const invalidConsultationTypes =
-      consultationTypes.filter(
-        (type) =>
-          !validConsultationTypes.includes(type)
-      );
-
-    if (invalidConsultationTypes.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid consultation type provided",
-        invalidConsultationTypes,
-      });
-    }
-
-    // --------------------------------------------------
-    // UPDATE / CREATE SCHEDULE
-    // --------------------------------------------------
-
-    const schedule =
-      await DoctorSchedule.findOneAndUpdate(
-        {
-          doctor: doctorId,
-        },
-        {
-          doctor: doctorId,
-          availableDays,
-          timeSlots,
-          consultationTypes,
-        },
-        {
-          new: true,
-          upsert: true,
-          runValidators: true,
-        }
-      );
-
-    // --------------------------------------------------
-    // RESPONSE
-    // --------------------------------------------------
-
-    return res.status(200).json({
-      success: true,
-      message: "Doctor schedule updated successfully",
-      schedule,
-    });
-  } catch (error) {
-    console.error(
-      "Update doctor schedule error:",
-      error.message
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
+  return res.status(200).json({
+    success: true,
+    message: "Doctor schedule updated successfully",
+    schedule,
+  });
 };
 
-
-
-// ======================================================
-// ADD / UPDATE DATE EXCEPTION
-// ======================================================
-//
 // PUT /api/doctors/schedule/exception
-//
-// Body:
-//
-// {
-//   "date": "2026-10-12",
-//   "isAvailable": false,
-//   "timeSlots": [],
-//   "consultationTypes": [],
-//   "reason": "Doctor on leave"
-// }
-//
-// Doctor sirf apne schedule mein exception add/update
-// kar sakta hai.
-// ======================================================
+export const upsertDateException = async (req, res) => {
+  const { date, isAvailable, timeSlots, consultationTypes, reason } =
+    req.validated.body;
 
-export const updateDoctorDateException = async (
-  req,
-  res
-) => {
-  try {
-    const doctorId = req.user.id;
+  const existing = await DoctorSchedule.findOne({ doctor: req.user.id })
+    .select("dateExceptions.date")
+    .lean();
 
-    const {
-      date,
-      isAvailable,
-      timeSlots,
-      consultationTypes,
-      reason,
-    } = req.body;
+  const otherCount = (existing?.dateExceptions || []).filter(
+    (e) => e.date !== date
+  ).length;
 
-    // --------------------------------------------------
-    // DATE REQUIRED
-    // --------------------------------------------------
-
-    if (
-      !date ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(date)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Date must be in YYYY-MM-DD format",
-      });
-    }
-
-    // --------------------------------------------------
-    // AVAILABILITY REQUIRED
-    // --------------------------------------------------
-
-    if (typeof isAvailable !== "boolean") {
-      return res.status(400).json({
-        success: false,
-        message: "isAvailable must be true or false",
-      });
-    }
-
-    // --------------------------------------------------
-    // FIND DOCTOR SCHEDULE
-    // --------------------------------------------------
-
-    const schedule =
-      await DoctorSchedule.findOne({
-        doctor: doctorId,
-      });
-
-    if (!schedule) {
-      return res.status(404).json({
-        success: false,
-        message:
-          "Doctor schedule not found. Please create your weekly schedule first.",
-      });
-    }
-
-    // --------------------------------------------------
-    // NORMALIZE DATA
-    // --------------------------------------------------
-
-    const finalTimeSlots =
-      Array.isArray(timeSlots)
-        ? timeSlots
-        : [];
-
-    const finalConsultationTypes =
-      Array.isArray(consultationTypes)
-        ? consultationTypes
-        : [];
-
-    const finalReason =
-      typeof reason === "string"
-        ? reason.trim()
-        : "";
-
-    // --------------------------------------------------
-    // VALIDATE CONSULTATION TYPES
-    // --------------------------------------------------
-
-    const allowedConsultationTypes = [
-      "Clinic Visit",
-      "Online",
-    ];
-
-    const invalidConsultationType =
-      finalConsultationTypes.some(
-        (type) =>
-          !allowedConsultationTypes.includes(type)
-      );
-
-    if (invalidConsultationType) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invalid consultation type",
-      });
-    }
-
-    // --------------------------------------------------
-    // FIND EXISTING EXCEPTION
-    // --------------------------------------------------
-
-    const existingException =
-      schedule.dateExceptions.find(
-        (exception) =>
-          exception.date === date
-      );
-
-    // --------------------------------------------------
-    // UPDATE EXISTING EXCEPTION
-    // --------------------------------------------------
-
-    if (existingException) {
-      existingException.isAvailable =
-        isAvailable;
-
-      existingException.timeSlots =
-        finalTimeSlots;
-
-      existingException.consultationTypes =
-        finalConsultationTypes;
-
-      existingException.reason =
-        finalReason;
-    }
-
-    // --------------------------------------------------
-    // CREATE NEW EXCEPTION
-    // --------------------------------------------------
-
-    else {
-      schedule.dateExceptions.push({
-        date,
-        isAvailable,
-        timeSlots:
-          finalTimeSlots,
-        consultationTypes:
-          finalConsultationTypes,
-        reason:
-          finalReason,
-      });
-    }
-
-    await schedule.save();
-
-    // --------------------------------------------------
-    // RESPONSE
-    // --------------------------------------------------
-
-    return res.status(200).json({
-      success: true,
-      message:
-        "Doctor date exception updated successfully",
-      schedule,
-    });
-
-  } catch (error) {
-    console.error(
-      "Update doctor date exception error:",
-      error.message
-    );
-
-    return res.status(500).json({
+  if (otherCount >= 366) {
+    return res.status(400).json({
       success: false,
-      message: "Server error",
+      message: "Too many date exceptions. Please delete old ones first.",
     });
   }
+
+  const entry = {
+    date,
+    isAvailable,
+    // Unavailable din par slots/types ka matlab nahi
+    timeSlots: isAvailable ? [...timeSlots].sort() : [],
+    consultationTypes: isAvailable ? consultationTypes : [],
+    reason,
+  };
+
+  // Pehle us date ki purani entry hatao, phir nayi daalo
+  await DoctorSchedule.updateOne(
+    { doctor: req.user.id },
+    { $pull: { dateExceptions: { date } } }
+  );
+
+  await DoctorSchedule.updateOne(
+    { doctor: req.user.id },
+    { $push: { dateExceptions: entry } },
+    { upsert: true, setDefaultsOnInsert: true, runValidators: true }
+  );
+
+  const schedule = await loadSchedule(req.user.id);
+
+  return res.status(200).json({
+    success: true,
+    message: "Doctor date exception updated successfully",
+    schedule,
+  });
+};
+
+// DELETE /api/doctors/schedule/exception/:date
+export const deleteDateException = async (req, res) => {
+  const { date } = req.validated.params;
+
+  await DoctorSchedule.updateOne(
+    { doctor: req.user.id },
+    { $pull: { dateExceptions: { date } } }
+  );
+
+  const schedule = await loadSchedule(req.user.id);
+
+  return res.status(200).json({
+    success: true,
+    message: "Date exception removed",
+    schedule: schedule || { doctor: req.user.id, ...DEFAULT_SCHEDULE },
+  });
 };

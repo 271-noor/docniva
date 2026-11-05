@@ -1,80 +1,45 @@
-
 import express from "express";
-
-// ======================================================
-// PATIENT APPOINTMENT CONTROLLER
-// ======================================================
 
 import {
   createPatientAppointment,
   getPatientAppointments,
   cancelPatientAppointment,
 } from "../controllers/patient/patientAppointmentController.js";
-
-// ======================================================
-// AUTHENTICATION MIDDLEWARE
-// ======================================================
-
 import {
-  protect,
-  patientOnly,
-} from "../middleware/authMiddleware.js";
+  createPaymentOrder,
+  verifyAppointmentPayment,
+} from "../controllers/payment/paymentController.js";
+
+import { protect, patientOnly } from "../middleware/authMiddleware.js";
+import { validate } from "../middleware/validate.js";
+import {
+  createAppointmentSchema,
+  appointmentIdParams,
+} from "../validators/bookingSchemas.js";
 
 const router = express.Router();
 
-// ======================================================
-// CREATE APPOINTMENT
-// ======================================================
-//
-// POST /api/appointments
-//
-// Logged-in patient appointment create karega.
-// ======================================================
+// Is file ke saare routes sirf logged-in patient ke liye hain
+router.use(protect, patientOnly);
 
-router.post(
-  "/",
-  protect,
-  patientOnly,
-  createPatientAppointment
-);
-
-// ======================================================
-// GET PATIENT APPOINTMENTS
-// ======================================================
-//
-// GET /api/appointments
-//
-// Logged-in patient ke saare appointments.
-// Patient ID URL mein nahi deni hai.
-// JWT se req.user.id milega.
-// ======================================================
-
-router.get(
-  "/",
-  protect,
-  patientOnly,
-  getPatientAppointments
-);
-
-// ======================================================
-// CANCEL APPOINTMENT
-// ======================================================
-//
-// PATCH /api/appointments/:appointmentId/cancel
-//
-// Patient sirf apna appointment cancel kar sakta hai.
-// ======================================================
-
+router.post("/", validate({ body: createAppointmentSchema }), createPatientAppointment);
+router.get("/", getPatientAppointments);
 router.patch(
   "/:appointmentId/cancel",
-  protect,
-  patientOnly,
+  validate({ params: appointmentIdParams }),
   cancelPatientAppointment
 );
 
-// ======================================================
-// EXPORT
-// ======================================================
+// Payment (ye Step 5 mein badlega)
+router.post(
+  "/:appointmentId/payment/order",
+  validate({ params: appointmentIdParams }),
+  createPaymentOrder
+);
+router.post(
+  "/:appointmentId/payment/verify",
+  validate({ params: appointmentIdParams }),
+  verifyAppointmentPayment
+);
 
 export default router;
-

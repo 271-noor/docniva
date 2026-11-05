@@ -1,34 +1,30 @@
-// Mongoose import kar rahe hain
-// MongoDB ke saath connection aur database operations ke liye
 import mongoose from "mongoose";
 
+// Query injection se bachata hai ($ia operators ko plain value maan leta hai)
+mongoose.set("sanitizeFilter", true);
 
-// ========================================
-// DATABASE CONNECTION
-// ========================================
+// Schema me na likhe fields ke queries ignore ho jayein
+mongoose.set("strictQuery", true);
 
 const connectDB = async () => {
   try {
-    // .env se MongoDB connection URL lekar
-    // MongoDB se connect kar rahe hain
-    await mongoose.connect(process.env.MONGO_URI);
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 10000, // Atlas na mile to 10 sec me fail
+      maxPoolSize: 10,
+    });
 
-    // Connection successful hone par message
     console.log("MongoDB connected successfully");
 
+    mongoose.connection.on("error", (err) => {
+      console.error("MongoDB runtime error:", err.message);
+    });
+    mongoose.connection.on("disconnected", () => {
+      console.warn("MongoDB disconnected");
+    });
   } catch (error) {
-    // Agar MongoDB connection fail ho jaye
-    console.error(
-      "MongoDB connection failed:",
-      error.message
-    );
-
-    // Server ko stop kar denge
-    // Kyunki database ke bina backend properly kaam nahi karega
+    console.error("MongoDB connection failed:", error.message);
     process.exit(1);
   }
 };
 
-
-// server.js me use karne ke liye export
 export default connectDB;

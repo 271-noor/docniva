@@ -1,76 +1,77 @@
-
 import mongoose from "mongoose";
-
-// ========================================
-// PATIENT SCHEMA
-// ========================================
 
 const patientSchema = new mongoose.Schema(
   {
-    // Patient ka full name
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    name: { type: String, required: true, trim: true, minlength: 2, maxlength: 80 },
 
-    // Patient ka email
     email: {
       type: String,
       required: true,
       unique: true,
       lowercase: true,
       trim: true,
+      maxlength: 254,
     },
 
-    // Patient ka mobile number
+    // Ek phone se ek se zyada account allowed hain (unique nahi)
     phone: {
       type: String,
       required: true,
       trim: true,
+      match: [/^\+?\d{10,15}$/, "Please enter a valid phone number"],
     },
 
-    // Patient ki age
-    age: {
-      type: Number,
-      min: 1,
-      max: 120,
-    },
+    // 0 = 1 saal se chhota bachha
+    age: { type: Number, min: 0, max: 120 },
 
-    // Patient ka gender
-    gender: {
-      type: String,
-      enum: ["Male", "Female", "Other"],
-    },
+    gender: { type: String, enum: ["Male", "Female", "Other"] },
 
-    // Patient ka city
-    city: {
-      type: String,
-      trim: true,
-    },
+    city: { type: String, trim: true, maxlength: 80 },
 
-    // Password database me plain text me store nahi hoga
-    // Register API me bcrypt se hash kiya jayega
-    password: {
-      type: String,
-      required: true,
-      minlength: 6,
-    },
+    // bcrypt hash store hota hai
+    password: { type: String, required: true, select: false },
+
+    // Admin kisi ko block kar sake
+    isBlocked: { type: Boolean, default: false },
+
+    // Email verification
+    isEmailVerified: { type: Boolean, default: false },
+    emailVerificationToken: { type: String, default: undefined, select: false },
+    emailVerificationExpires: { type: Date, default: undefined, select: false },
+
+    // Is time se pehle bane tokens invalid maane jayenge
+    passwordChangedAt: { type: Date, select: false },
+
+    // Account lockout
+    loginAttempts: { type: Number, default: 0, select: false },
+    lockUntil: { type: Date, select: false },
+
+    // Password reset (token ka hash)
+    resetPasswordToken: { type: String, default: undefined, select: false },
+    resetPasswordExpires: { type: Date, default: undefined, select: false },
   },
   {
-    // createdAt aur updatedAt automatically add honge
     timestamps: true,
+    toJSON: {
+      transform: (doc, ret) => {
+        delete ret.__v;
+        delete ret.password;
+        delete ret.emailVerificationToken;
+        delete ret.emailVerificationExpires;
+        delete ret.passwordChangedAt;
+        delete ret.loginAttempts;
+        delete ret.lockUntil;
+        delete ret.resetPasswordToken;
+        delete ret.resetPasswordExpires;
+        return ret;
+      },
+    },
   }
 );
 
-// ========================================
-// MODEL
-// ========================================
+patientSchema.index({ resetPasswordToken: 1 }, { sparse: true });
+patientSchema.index({ emailVerificationToken: 1 }, { sparse: true });
 
-const Patient = mongoose.model(
-  "Patient",
-  patientSchema
-);
+const Patient = mongoose.model("Patient", patientSchema);
 
 export default Patient;
-

@@ -1,161 +1,48 @@
-
 import express from "express";
-
-// ======================================================
-// PATIENT AUTH CONTROLLER
-// ======================================================
 
 import {
   registerPatient,
   loginPatient,
+  logoutPatient,
+  getPatientMe,
+  verifyPatientEmail,
+  resendPatientVerification,
+  forgotPatientPassword,
+  resetPatientPassword,
 } from "../controllers/auth/patientAuthController.js";
-
-// ======================================================
-// PATIENT DASHBOARD CONTROLLER
-// ======================================================
-
-import {
-  getPatientDashboard,
-} from "../controllers/patient/patientDashboardController.js";
-
-// ======================================================
-// PATIENT PROFILE CONTROLLER
-// ======================================================
-
+import { getPatientDashboard } from "../controllers/patient/patientDashboardController.js";
 import {
   getPatientProfile,
   updatePatientProfile,
 } from "../controllers/patient/patientProfileController.js";
 
-// ======================================================
-// AUTHENTICATION MIDDLEWARE
-// ======================================================
-
+import { protect, patientOnly } from "../middleware/authMiddleware.js";
+import { validate } from "../middleware/validate.js";
 import {
-  protect,
-  patientOnly,
-} from "../middleware/authMiddleware.js";
+  loginSchema,
+  patientRegisterSchema,
+  emailOnlySchema,
+  tokenSchema,
+  resetPasswordSchema,
+} from "../validators/authSchemas.js";
 
 const router = express.Router();
 
-// ======================================================
-// 1. PATIENT AUTH ROUTES
-// ======================================================
+// ---------- AUTH ----------
+router.post("/register", validate({ body: patientRegisterSchema }), registerPatient);
+router.post("/login", validate({ body: loginSchema }), loginPatient);
+router.post("/logout", logoutPatient);
+router.post("/verify-email", validate({ body: tokenSchema }), verifyPatientEmail);
+router.post("/resend-verification", validate({ body: emailOnlySchema }), resendPatientVerification);
+router.post("/forgot-password", validate({ body: emailOnlySchema }), forgotPatientPassword);
+router.post("/reset-password", validate({ body: resetPasswordSchema }), resetPatientPassword);
+router.get("/me", protect, patientOnly, getPatientMe);
 
-// ------------------------------------------------------
-// PATIENT REGISTER
-// ------------------------------------------------------
-// POST /api/patients/register
-//
-// Body:
-// {
-//   name,
-//   email,
-//   phone,
-//   password
-// }
-// ------------------------------------------------------
+// ---------- DASHBOARD + PROFILE (ye aage ke step me badlenge) ----------
+router.get("/dashboard", protect, patientOnly, getPatientDashboard);
+router.get("/profile", protect, patientOnly, getPatientProfile);
+router.put("/profile", protect, patientOnly, updatePatientProfile);
 
-router.post(
-  "/register",
-  registerPatient
-);
-
-// ------------------------------------------------------
-// PATIENT LOGIN
-// ------------------------------------------------------
-// POST /api/patients/login
-//
-// Body:
-// {
-//   email,
-//   password
-// }
-// ------------------------------------------------------
-
-router.post(
-  "/login",
-  loginPatient
-);
-
-// ======================================================
-// 2. PATIENT DASHBOARD
-// ======================================================
-
-// ------------------------------------------------------
-// GET PATIENT DASHBOARD
-// ------------------------------------------------------
-// GET /api/patients/dashboard
-//
-// Login required.
-// JWT token required.
-// ------------------------------------------------------
-
-router.get(
-  "/dashboard",
-  protect,
-  patientOnly,
-  getPatientDashboard
-);
-
-// ======================================================
-// 3. PATIENT PROFILE
-// ======================================================
-
-// ------------------------------------------------------
-// GET PATIENT PROFILE
-// ------------------------------------------------------
-// GET /api/patients/profile
-//
-// Login required.
-// ------------------------------------------------------
-
-router.get(
-  "/profile",
-  protect,
-  patientOnly,
-  getPatientProfile
-);
-
-// ------------------------------------------------------
-// UPDATE PATIENT PROFILE
-// ------------------------------------------------------
-// PUT /api/patients/profile
-//
-// Body:
-// {
-//   name,
-//   phone,
-//   age,
-//   gender,
-//   city
-// }
-//
-// Email update nahi hoga.
-// Login required.
-// ------------------------------------------------------
-
-router.put(
-  "/profile",
-  protect,
-  patientOnly,
-  updatePatientProfile
-);
-
-// ======================================================
-// IMPORTANT
-// ======================================================
-//
-// Patient appointment routes yahan nahi hain.
-//
-// Appointments ke liye separate:
-// appointmentRoutes.js
-//
-// POST   /api/appointments
-// GET    /api/appointments
-// PATCH  /api/appointments/:appointmentId/cancel
-//
-// ======================================================
+// Appointment routes appointmentRoutes.js me hain.
 
 export default router;
-

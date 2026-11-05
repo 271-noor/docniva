@@ -1,128 +1,94 @@
-
 import jwt from "jsonwebtoken";
+import Patient from "../models/Patient.js";
+import Doctor from "../models/Doctor.js";
+import Admin from "../models/Admin.js";
 
-// ======================================================
-// PROTECT MIDDLEWARE
-// ======================================================
-//
-// JWT token verify karega.
-//
-// Header:
-// Authorization: Bearer TOKEN
-//
-// Valid token ke baad:
-// req.user = {
-//   id: "...",
-//   role: "patient" / "doctor"
-// }
-//
-// ======================================================
+const OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
+
+const ACCOUNTS = {
+  patient: { Model: Patient, fields: "isBlocked passwordChangedAt" },
+  doctor: { Model: Doctor, fields: "isBlocked isVerified passwordChangedAt" },
+  admin: { Model: Admin, fields: "isActive passwordChangedAt" },
+};
+
+const fail = (res, code, message) =>
+  res.status(code).json({ success: false, message });
+
+const getToken = (req) => {
+  if (req.cookies?.token) return req.cookies.token;
+
+  // Sirf transition ke liye. Frontend migrate hone par ALLOW_BEARER_AUTH=false.
+  if (process.env.ALLOW_BEARER_AUTH === "true") {
+    const header = req.headers.authorization;
+    if (header?.startsWith("Bearer ")) return header.slice(7);
+  }
+  return null;
+};
 
 export const protect = async (req, res, next) => {
+  const token = getToken(req);
+  if (!token) return fail(res, 401, "Authentication required");
+
+  let decoded;
   try {
-    // --------------------------------------------------
-    // GET AUTHORIZATION HEADER
-    // --------------------------------------------------
+    decoded = jwt.verify(token, process.env.JWT_SECRET, {
+      algorithms: ["HS256"],
+    });
+  } catch {
+    return fail(res, 401, "Invalid or expired token");
+  }
 
-    const authHeader = req.headers.authorization;
+  const entry = ACCOUNTS[decoded.role];
+  if (
+    !entry ||
+    typeof decoded.id !== "string" ||
+    !OBJECT_ID_RE.test(decoded.id)
+  ) {
+    return fail(res, 401, "Invalid token");
+  }
 
-    if (!authHeader) {
-      return res.status(401).json({
-        success: false,
-        message: "Authorization token is required",
-      });
+  let account;
+  try {
+    account = await entry.Model.findById(decoded.id)
+      .select(entry.fields)
+      .lean();
+  } catch (cause) {
+    // DB ki problem me user ko logout nahi karna, 503 dena hai
+    const err = new Error("Service temporarily unavailable");
+    err.statusCode = 503;
+    err.cause = cause;
+    return next(err);
+  }
+
+  if (!account || account.isBlocked || account.isActive === false) {
+    return fail(res, 401, "Account not available");
+  }
+
+  if (decoded.role === "doctor" && !account.isVerified) {
+    return fail(res, 403, "Your account is pending admin approval");
+  }
+
+  // Password badalne ke baad purane tokens band
+  if (
+    account.passwordChangedAt &&
+    decoded.iat * 1000 < new Date(account.passwordChangedAt).getTime()
+  ) {
+    return fail(res, 401, "Session expired, please log in again");
+  }
+
+  req.user = { id: String(account._id), role: decoded.role };
+  next();
+};
+
+export const requireRole =
+  (...roles) =>
+  (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return fail(res, 403, "Access denied");
     }
-
-    // --------------------------------------------------
-    // CHECK BEARER FORMAT
-    // --------------------------------------------------
-
-    if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid authorization format",
-      });
-    }
-
-    // --------------------------------------------------
-    // GET TOKEN
-    // --------------------------------------------------
-
-    const token = authHeader.split(" ")[1];
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Token is required",
-      });
-    }
-
-    // --------------------------------------------------
-    // VERIFY TOKEN
-    // --------------------------------------------------
-
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
-
-    // --------------------------------------------------
-    // SAVE USER INFO IN REQUEST
-    // --------------------------------------------------
-
-    req.user = {
-      id: decoded.id,
-      role: decoded.role,
-    };
-
     next();
+  };
 
-  } catch (error) {
-    console.error(
-      "Authentication error:",
-      error.message
-    );
-
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired token",
-    });
-  }
-};
-
-// ======================================================
-// PATIENT ONLY
-// ======================================================
-
-export const patientOnly = (req, res, next) => {
-  if (
-    !req.user ||
-    req.user.role !== "patient"
-  ) {
-    return res.status(403).json({
-      success: false,
-      message: "Patient access required",
-    });
-  }
-
-  next();
-};
-
-// ======================================================
-// DOCTOR ONLY
-// ======================================================
-
-export const doctorOnly = (req, res, next) => {
-  if (
-    !req.user ||
-    req.user.role !== "doctor"
-  ) {
-    return res.status(403).json({
-      success: false,
-      message: "Doctor access required",
-    });
-  }
-
-  next();
-};
-
+export const patientOnly = requireRole("patient");
+export const doctorOnly = requireRole("doctor");
+export const adminOnly = requireRole("admin");

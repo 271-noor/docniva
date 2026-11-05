@@ -1,11 +1,10 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Button from "../../components/common/Button";
 import Card from "../../components/common/Card";
 
-const API_URL = "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const days = [
   "Monday",
@@ -17,256 +16,97 @@ const days = [
   "Sunday",
 ];
 
-const createDefaultSchedule = () => ({
-  Monday: {
-    enabled: true,
-    start: "10:00",
-    end: "18:00",
-    breakStart: "13:00",
-    breakEnd: "14:00",
-  },
-  Tuesday: {
-    enabled: true,
-    start: "10:00",
-    end: "18:00",
-    breakStart: "13:00",
-    breakEnd: "14:00",
-  },
-  Wednesday: {
-    enabled: true,
-    start: "10:00",
-    end: "18:00",
-    breakStart: "13:00",
-    breakEnd: "14:00",
-  },
-  Thursday: {
-    enabled: true,
-    start: "10:00",
-    end: "18:00",
-    breakStart: "13:00",
-    breakEnd: "14:00",
-  },
-  Friday: {
-    enabled: true,
-    start: "10:00",
-    end: "18:00",
-    breakStart: "13:00",
-    breakEnd: "14:00",
-  },
-  Saturday: {
-    enabled: false,
-    start: "10:00",
-    end: "14:00",
-    breakStart: "",
-    breakEnd: "",
-  },
-  Sunday: {
-    enabled: false,
-    start: "10:00",
-    end: "14:00",
-    breakStart: "",
-    breakEnd: "",
-  },
-});
+const durations = [15, 20, 30, 45, 60];
+const typeOptions = ["Clinic Visit", "Online"];
+
+const weekdayDefault = {
+  enabled: true,
+  startTime: "10:00",
+  endTime: "18:00",
+  breakStart: "13:00",
+  breakEnd: "14:00",
+};
+
+const weekendDefault = {
+  enabled: false,
+  startTime: "10:00",
+  endTime: "14:00",
+  breakStart: "",
+  breakEnd: "",
+};
+
+const createDefaultSchedule = () =>
+  Object.fromEntries(
+    days.map((day) => [
+      day,
+      { ...(day === "Saturday" || day === "Sunday" ? weekendDefault : weekdayDefault) },
+    ])
+  );
+
+const getToken = () => localStorage.getItem("docniva-doctor-token");
 
 function DoctorSchedule() {
   const navigate = useNavigate();
 
-  const [schedule, setSchedule] = useState(
-    createDefaultSchedule()
-  );
+  const [schedule, setSchedule] = useState(createDefaultSchedule());
+  const [slotDuration, setSlotDuration] = useState(30);
+  const [consultationTypes, setConsultationTypes] = useState(["Clinic Visit"]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
-  // ======================================================
-  // LOAD SCHEDULE
-  // ======================================================
-
+  // ---------- LOAD ----------
   useEffect(() => {
     const loadSchedule = async () => {
       try {
-        setLoading(true);
-        setError("");
-
-        const token = localStorage.getItem(
-          "docniva-doctor-token"
-        );
-
-        if (!token) {
-          setError("Doctor login required.");
-          return;
-        }
-
-        const response = await fetch(
-          `${API_URL}/api/doctors/schedule`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        const response = await fetch(`${API_URL}/api/doctors/schedule`, {
+          credentials: "include",
+          headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+        });
 
         const data = await response.json();
 
-        console.log(
-          "GET DOCTOR SCHEDULE:",
-          data
-        );
-
         if (!response.ok) {
-          setError(
-            data.message ||
-              "Unable to load doctor schedule."
-          );
+          setError(data.message || "Unable to load doctor schedule.");
           return;
         }
 
-        const backendSchedule = data.schedule;
+        const backend = data.schedule || {};
+        const next = createDefaultSchedule();
+        const savedDays = Array.isArray(backend.weekly) ? backend.weekly : [];
 
-        if (!backendSchedule) {
-          return;
-        }
-
-        const backendDays =
-          Array.isArray(
-            backendSchedule.availableDays
-          )
-            ? backendSchedule.availableDays
-            : [];
-
-        const backendSlots =
-          Array.isArray(
-            backendSchedule.timeSlots
-          )
-            ? backendSchedule.timeSlots
-            : [];
-
-        const updatedSchedule =
-          createDefaultSchedule();
-
-        // --------------------------------------------------
-        // AVAILABLE DAYS
-        // --------------------------------------------------
-
+        // Pehle sab din band, phir save wale din chalu
         days.forEach((day) => {
-          updatedSchedule[day].enabled =
-            backendDays.includes(day);
+          next[day].enabled = false;
         });
 
-        // --------------------------------------------------
-        // BACKEND SLOTS SE FIRST/LAST TIME
-        // --------------------------------------------------
-
-        if (backendSlots.length > 0) {
-          const convertTo24Hour = (time) => {
-            if (!time) {
-              return "";
-            }
-
-            const parts = time.trim().split(" ");
-
-            if (parts.length !== 2) {
-              return time;
-            }
-
-            const rawTime = parts[0];
-            const modifier =
-              parts[1].toUpperCase();
-
-            let [hours, minutes] =
-              rawTime.split(":").map(Number);
-
-            if (
-              modifier === "PM" &&
-              hours !== 12
-            ) {
-              hours += 12;
-            }
-
-            if (
-              modifier === "AM" &&
-              hours === 12
-            ) {
-              hours = 0;
-            }
-
-            return `${String(hours).padStart(
-              2,
-              "0"
-            )}:${String(minutes).padStart(
-              2,
-              "0"
-            )}`;
+        savedDays.forEach((item) => {
+          if (!next[item.day]) return;
+          next[item.day] = {
+            enabled: true,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            breakStart: item.breakStart || "",
+            breakEnd: item.breakEnd || "",
           };
+        });
 
-          const convertedSlots =
-            backendSlots
-              .map(convertTo24Hour)
-              .filter(Boolean);
+        // Pehli baar (kuch save nahi hua) to default weekdays chalu rakho
+        setSchedule(savedDays.length > 0 ? next : createDefaultSchedule());
 
-          if (convertedSlots.length > 0) {
-            const firstSlot =
-              convertedSlots[0];
-
-            const lastSlot =
-              convertedSlots[
-                convertedSlots.length - 1
-              ];
-
-            days.forEach((day) => {
-              if (
-                updatedSchedule[day].enabled
-              ) {
-                updatedSchedule[day].start =
-                  firstSlot;
-
-                // Last slot ko exact end na maan kar
-                // next 1 hour ko end maanenge.
-                const [hours, minutes] =
-                  lastSlot
-                    .split(":")
-                    .map(Number);
-
-                const endDate = new Date();
-
-                endDate.setHours(
-                  hours,
-                  minutes + 60,
-                  0,
-                  0
-                );
-
-                updatedSchedule[day].end =
-                  `${String(
-                    endDate.getHours()
-                  ).padStart(
-                    2,
-                    "0"
-                  )}:${String(
-                    endDate.getMinutes()
-                  ).padStart(
-                    2,
-                    "0"
-                  )}`;
-              }
-            });
-          }
+        if (durations.includes(backend.slotDurationMinutes)) {
+          setSlotDuration(backend.slotDurationMinutes);
         }
-
-        setSchedule(updatedSchedule);
-      } catch (error) {
-        console.error(
-          "Load doctor schedule error:",
-          error
-        );
-
-        setError(
-          "Unable to connect to the backend."
-        );
+        if (
+          Array.isArray(backend.consultationTypes) &&
+          backend.consultationTypes.length > 0
+        ) {
+          setConsultationTypes(backend.consultationTypes);
+        }
+      } catch {
+        setError("Unable to connect to the backend.");
       } finally {
         setLoading(false);
       }
@@ -275,107 +115,64 @@ function DoctorSchedule() {
     loadSchedule();
   }, []);
 
-  // ======================================================
-  // DAY TOGGLE
-  // ======================================================
+  // ---------- CHANGE HANDLERS ----------
+  const markDirty = () => {
+    setSaved(false);
+    setError("");
+  };
 
   const handleDayToggle = (day) => {
     setSchedule((prev) => ({
       ...prev,
-      [day]: {
-        ...prev[day],
-        enabled: !prev[day].enabled,
-      },
+      [day]: { ...prev[day], enabled: !prev[day].enabled },
     }));
-
-    setSaved(false);
-    setError("");
+    markDirty();
   };
 
-  // ======================================================
-  // INPUT CHANGE
-  // ======================================================
-
-  const handleChange = (
-    day,
-    field,
-    value
-  ) => {
+  const handleChange = (day, field, value) => {
     setSchedule((prev) => ({
       ...prev,
-      [day]: {
-        ...prev[day],
-        [field]: value,
-      },
+      [day]: { ...prev[day], [field]: value },
     }));
-
-    setSaved(false);
-    setError("");
+    markDirty();
   };
 
-  // ======================================================
-  // VALIDATE
-  // ======================================================
-
-  const validateSchedule = () => {
-    const enabledDays = days.filter(
-      (day) => schedule[day].enabled
+  const handleTypeToggle = (type) => {
+    setConsultationTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
     );
+    markDirty();
+  };
+
+  // ---------- VALIDATE ----------
+  const validateSchedule = () => {
+    const enabledDays = days.filter((day) => schedule[day].enabled);
 
     if (enabledDays.length === 0) {
       return "Please select at least one available day.";
     }
 
-    for (const day of days) {
-      const daySchedule = schedule[day];
+    if (consultationTypes.length === 0) {
+      return "Please select at least one consultation type.";
+    }
 
-      if (!daySchedule.enabled) {
-        continue;
-      }
+    for (const day of enabledDays) {
+      const { startTime, endTime, breakStart, breakEnd } = schedule[day];
 
-      if (
-        !daySchedule.start ||
-        !daySchedule.end
-      ) {
+      if (!startTime || !endTime) {
         return `${day}: Please select start and end time.`;
       }
-
-      if (
-        daySchedule.start >=
-        daySchedule.end
-      ) {
+      if (startTime >= endTime) {
         return `${day}: End time must be later than start time.`;
       }
-
-      const hasBreakStart =
-        Boolean(daySchedule.breakStart);
-
-      const hasBreakEnd =
-        Boolean(daySchedule.breakEnd);
-
-      if (
-        hasBreakStart !== hasBreakEnd
-      ) {
+      if (Boolean(breakStart) !== Boolean(breakEnd)) {
         return `${day}: Please select both break start and break end time.`;
       }
-
-      if (
-        hasBreakStart &&
-        hasBreakEnd
-      ) {
-        if (
-          daySchedule.breakStart >=
-          daySchedule.breakEnd
-        ) {
+      if (breakStart && breakEnd) {
+        if (breakStart >= breakEnd) {
           return `${day}: Break end must be later than break start.`;
         }
-
-        if (
-          daySchedule.breakStart <=
-            daySchedule.start ||
-          daySchedule.breakEnd >=
-            daySchedule.end
-        ) {
+        if (breakStart <= startTime || breakEnd >= endTime) {
           return `${day}: Break must be inside working hours.`;
         }
       }
@@ -384,292 +181,74 @@ function DoctorSchedule() {
     return "";
   };
 
-  // ======================================================
-  // FORMAT TIME
-  // ======================================================
-
-  const formatTime = (time) => {
-    if (!time) {
-      return "";
-    }
-
-    let [hours, minutes] =
-      time.split(":").map(Number);
-
-    const modifier =
-      hours >= 12 ? "PM" : "AM";
-
-    hours = hours % 12;
-
-    if (hours === 0) {
-      hours = 12;
-    }
-
-    return `${String(hours).padStart(
-      2,
-      "0"
-    )}:${String(minutes).padStart(
-      2,
-      "0"
-    )} ${modifier}`;
-  };
-
-  // ======================================================
-  // GENERATE TIME SLOTS
-  // ======================================================
-
-  const generateTimeSlots = () => {
-    const enabledDays = days.filter(
-      (day) => schedule[day].enabled
-    );
-
-    if (enabledDays.length === 0) {
-      return [];
-    }
-
-    // Backend currently has one common timeSlots array.
-    // Isliye first enabled day ke timings use karenge.
-
-    const firstDay = enabledDays[0];
-
-    const {
-      start,
-      end,
-      breakStart,
-      breakEnd,
-    } = schedule[firstDay];
-
-    if (!start || !end) {
-      return [];
-    }
-
-    let [startHour, startMinute] =
-      start.split(":").map(Number);
-
-    const [endHour, endMinute] =
-      end.split(":").map(Number);
-
-    const breakStartMinutes =
-      breakStart
-        ? Number(
-            breakStart.split(":")[0]
-          ) *
-            60 +
-          Number(
-            breakStart.split(":")[1]
-          )
-        : null;
-
-    const breakEndMinutes =
-      breakEnd
-        ? Number(
-            breakEnd.split(":")[0]
-          ) *
-            60 +
-          Number(
-            breakEnd.split(":")[1]
-          )
-        : null;
-
-    const slots = [];
-
-    while (
-      startHour * 60 +
-        startMinute <
-      endHour * 60 +
-        endMinute
-    ) {
-      const currentMinutes =
-        startHour * 60 +
-        startMinute;
-
-      if (
-        breakStartMinutes !== null &&
-        breakEndMinutes !== null &&
-        currentMinutes >=
-          breakStartMinutes &&
-        currentMinutes <
-          breakEndMinutes
-      ) {
-        startMinute += 60;
-
-        if (startMinute >= 60) {
-          startHour += Math.floor(
-            startMinute / 60
-          );
-
-          startMinute =
-            startMinute % 60;
-        }
-
-        continue;
-      }
-
-      slots.push(
-        formatTime(
-          `${String(
-            startHour
-          ).padStart(
-            2,
-            "0"
-          )}:${String(
-            startMinute
-          ).padStart(
-            2,
-            "0"
-          )}`
-        )
-      );
-
-      startMinute += 60;
-
-      if (startMinute >= 60) {
-        startHour += Math.floor(
-          startMinute / 60
-        );
-
-        startMinute =
-          startMinute % 60;
-      }
-    }
-
-    return slots;
-  };
-
-  // ======================================================
-  // SAVE
-  // ======================================================
-
+  // ---------- SAVE ----------
   const handleSave = async (event) => {
     event.preventDefault();
-
     setSaved(false);
     setError("");
 
-    const validationError =
-      validateSchedule();
-
+    const validationError = validateSchedule();
     if (validationError) {
       setError(validationError);
       return;
     }
 
+    const weekly = days
+      .filter((day) => schedule[day].enabled)
+      .map((day) => ({
+        day,
+        startTime: schedule[day].startTime,
+        endTime: schedule[day].endTime,
+        breakStart: schedule[day].breakStart || "",
+        breakEnd: schedule[day].breakEnd || "",
+      }));
+
     try {
       setSaving(true);
 
-      const token = localStorage.getItem(
-        "docniva-doctor-token"
-      );
-
-      if (!token) {
-        setError("Doctor login required.");
-        return;
-      }
-
-      const availableDays =
-        days.filter(
-          (day) =>
-            schedule[day].enabled
-        );
-
-      const timeSlots =
-        generateTimeSlots();
-
-      if (timeSlots.length === 0) {
-        setError(
-          "Unable to generate time slots. Please check your timings."
-        );
-        return;
-      }
-
-      const consultationTypes = [
-        "Clinic Visit",
-        "Online",
-      ];
-
-      const response = await fetch(
-        `${API_URL}/api/doctors/schedule`,
-        {
-          method: "PUT",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            Authorization: `Bearer ${token}`,
-          },
-
-          body: JSON.stringify({
-            availableDays,
-            timeSlots,
-            consultationTypes,
-          }),
-        }
-      );
+      const response = await fetch(`${API_URL}/api/doctors/schedule`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        },
+        body: JSON.stringify({
+          weekly,
+          slotDurationMinutes: slotDuration,
+          consultationTypes,
+        }),
+      });
 
       const data = await response.json();
 
-      console.log(
-        "UPDATE DOCTOR SCHEDULE:",
-        data
-      );
-
       if (!response.ok) {
-        setError(
-          data.message ||
-            "Unable to save schedule."
-        );
+        setError(data.message || "Unable to save schedule.");
         return;
       }
 
       setSaved(true);
-
-      // Backend se returned schedule ko console mein
-      // clearly verify kar sakte hain.
-      console.log(
-        "SAVED SCHEDULE:",
-        data.schedule
-      );
-    } catch (error) {
-      console.error(
-        "Save doctor schedule error:",
-        error
-      );
-
-      setError(
-        "Unable to connect to the backend."
-      );
+    } catch {
+      setError("Unable to connect to the backend.");
     } finally {
       setSaving(false);
     }
   };
 
-  // ======================================================
-  // RESET
-  // ======================================================
-
+  // ---------- RESET ----------
   const handleReset = () => {
-    const confirmed =
-      window.confirm(
-        "Reset your schedule to the default timings?"
-      );
+    if (!window.confirm("Reset your schedule to the default timings?")) return;
 
-    if (!confirmed) {
-      return;
-    }
-
-    setSchedule(
-      createDefaultSchedule()
-    );
-
-    setSaved(false);
-    setError("");
+    setSchedule(createDefaultSchedule());
+    setSlotDuration(30);
+    setConsultationTypes(["Clinic Visit"]);
+    markDirty();
   };
 
-  // ======================================================
-  // LOADING
-  // ======================================================
+  const inputClass =
+    "w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] px-3 py-2.5 text-sm outline-none focus:border-[var(--primary)]";
 
+  // ---------- LOADING ----------
   if (loading) {
     return (
       <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-10">
@@ -684,33 +263,23 @@ function DoctorSchedule() {
     );
   }
 
-  // ======================================================
-  // UI
-  // ======================================================
-
+  // ---------- UI ----------
   return (
     <main className="min-h-[calc(100vh-72px)] bg-[var(--soft-background)] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-5xl">
-
         <button
           type="button"
-          onClick={() =>
-            navigate("/doctor/dashboard")
-          }
+          onClick={() => navigate("/doctor/dashboard")}
           className="mb-6 text-sm font-medium text-[var(--primary)] hover:underline"
         >
           ← Back to Dashboard
         </button>
 
         <div className="mb-8">
-          <p className="font-semibold text-[var(--primary)]">
-            Doctor Schedule
-          </p>
-
+          <p className="font-semibold text-[var(--primary)]">Doctor Schedule</p>
           <h1 className="mt-2 text-2xl font-bold text-[var(--text-primary)] sm:text-3xl">
             Manage Schedule
           </h1>
-
           <p className="mt-2 text-[var(--text-secondary)]">
             Set your available days and consultation timings.
           </p>
@@ -718,12 +287,59 @@ function DoctorSchedule() {
 
         <Card className="p-6 sm:p-8">
           <form onSubmit={handleSave}>
+            {/* Slot duration + consultation types */}
+            <div className="mb-6 grid gap-5 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="slot-duration"
+                  className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]"
+                >
+                  Appointment length
+                </label>
+                <select
+                  id="slot-duration"
+                  value={slotDuration}
+                  onChange={(event) => {
+                    setSlotDuration(Number(event.target.value));
+                    markDirty();
+                  }}
+                  className={inputClass}
+                >
+                  {durations.map((minutes) => (
+                    <option key={minutes} value={minutes}>
+                      {minutes} minutes
+                    </option>
+                  ))}
+                </select>
+              </div>
 
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-[var(--text-primary)]">
+                  Consultation types
+                </p>
+                <div className="flex flex-wrap gap-4 pt-2">
+                  {typeOptions.map((type) => (
+                    <label
+                      key={type}
+                      className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-secondary)]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={consultationTypes.includes(type)}
+                        onChange={() => handleTypeToggle(type)}
+                        className="h-4 w-4 accent-[var(--primary)]"
+                      />
+                      {type}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Days */}
             <div className="space-y-4">
-
               {days.map((day) => {
-                const daySchedule =
-                  schedule[day];
+                const daySchedule = schedule[day];
 
                 return (
                   <div
@@ -734,148 +350,69 @@ function DoctorSchedule() {
                         : "border-[var(--border)] bg-[var(--soft-background)]"
                     }`}
                   >
-
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
                       <div className="flex items-center gap-3">
-
                         <input
                           id={`${day}-enabled`}
                           type="checkbox"
-                          checked={
-                            daySchedule.enabled
-                          }
-                          onChange={() =>
-                            handleDayToggle(day)
-                          }
+                          checked={daySchedule.enabled}
+                          onChange={() => handleDayToggle(day)}
                           className="h-5 w-5 accent-[var(--primary)]"
                         />
-
-                        <label
-                          htmlFor={`${day}-enabled`}
-                          className="cursor-pointer"
-                        >
+                        <label htmlFor={`${day}-enabled`} className="cursor-pointer">
                           <p className="font-semibold text-[var(--text-primary)]">
                             {day}
                           </p>
-
                           <p className="text-xs text-[var(--text-muted)]">
-                            {daySchedule.enabled
-                              ? "Available"
-                              : "Unavailable"}
+                            {daySchedule.enabled ? "Available" : "Unavailable"}
                           </p>
                         </label>
-
                       </div>
 
                       {daySchedule.enabled && (
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-
-                          <div>
-                            <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-                              Start Time
-                            </label>
-
-                            <input
-                              type="time"
-                              value={
-                                daySchedule.start
-                              }
-                              onChange={(event) =>
-                                handleChange(
-                                  day,
-                                  "start",
-                                  event.target.value
-                                )
-                              }
-                              className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] px-3 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-                              End Time
-                            </label>
-
-                            <input
-                              type="time"
-                              value={
-                                daySchedule.end
-                              }
-                              onChange={(event) =>
-                                handleChange(
-                                  day,
-                                  "end",
-                                  event.target.value
-                                )
-                              }
-                              className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] px-3 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-                              Break Start
-                            </label>
-
-                            <input
-                              type="time"
-                              value={
-                                daySchedule.breakStart
-                              }
-                              onChange={(event) =>
-                                handleChange(
-                                  day,
-                                  "breakStart",
-                                  event.target.value
-                                )
-                              }
-                              className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] px-3 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-                              Break End
-                            </label>
-
-                            <input
-                              type="time"
-                              value={
-                                daySchedule.breakEnd
-                              }
-                              onChange={(event) =>
-                                handleChange(
-                                  day,
-                                  "breakEnd",
-                                  event.target.value
-                                )
-                              }
-                              className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] px-3 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
-                            />
-                          </div>
-
+                          {[
+                            ["startTime", "Start Time"],
+                            ["endTime", "End Time"],
+                            ["breakStart", "Break Start"],
+                            ["breakEnd", "Break End"],
+                          ].map(([field, label]) => (
+                            <div key={field}>
+                              <label
+                                htmlFor={`${day}-${field}`}
+                                className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]"
+                              >
+                                {label}
+                              </label>
+                              <input
+                                id={`${day}-${field}`}
+                                type="time"
+                                value={daySchedule[field]}
+                                onChange={(event) =>
+                                  handleChange(day, field, event.target.value)
+                                }
+                                className={inputClass}
+                              />
+                            </div>
+                          ))}
                         </div>
                       )}
-
                     </div>
                   </div>
                 );
               })}
-
             </div>
 
             <div className="mt-6 rounded-xl bg-[var(--primary-light)] p-4">
               <p className="text-sm leading-6 text-[var(--text-secondary)]">
-                Your schedule will be saved in the backend database and used for patient appointment booking.
+                Each day uses its own timings. Patients can book slots of the
+                selected length, and break time is skipped automatically.
               </p>
             </div>
 
             {error && (
               <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
-                <p className="text-sm font-medium text-red-700">
-                  {error}
-                </p>
+                <p className="text-sm font-medium text-red-700">{error}</p>
               </div>
             )}
 
@@ -888,13 +425,10 @@ function DoctorSchedule() {
             )}
 
             <div className="mt-6 flex flex-col gap-3 border-t border-[var(--border)] pt-6 sm:flex-row sm:justify-end">
-
               <Button
                 type="button"
                 variant="outline"
-                onClick={() =>
-                  navigate("/doctor/dashboard")
-                }
+                onClick={() => navigate("/doctor/dashboard")}
               >
                 Cancel
               </Button>
@@ -908,17 +442,10 @@ function DoctorSchedule() {
                 Reset Schedule
               </Button>
 
-              <Button
-                type="submit"
-                disabled={saving}
-              >
-                {saving
-                  ? "Saving..."
-                  : "Save Schedule"}
+              <Button type="submit" disabled={saving}>
+                {saving ? "Saving..." : "Save Schedule"}
               </Button>
-
             </div>
-
           </form>
         </Card>
       </div>
@@ -927,4 +454,3 @@ function DoctorSchedule() {
 }
 
 export default DoctorSchedule;
-

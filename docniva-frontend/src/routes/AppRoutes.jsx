@@ -4,6 +4,10 @@ import RoleSelection from "../pages/public/RoleSelection";
 
 import PatientLogin from "../pages/patient/PatientLogin";
 import PatientRegister from "../pages/patient/PatientRegister";
+
+import PatientForgotPassword from "../pages/patient/PatientForgotPassword";
+import PatientResetPassword from "../pages/patient/PatientResetPassword";
+
 import PatientDashboard from "../pages/patient/PatientDashboard";
 import FindDoctor from "../pages/patient/FindDoctor";
 import PatientDoctorProfile from "../pages/patient/DoctorProfile";
@@ -21,7 +25,7 @@ import NotFound from "../pages/public/NotFound";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DoctorSchedule from "../pages/doctor/DoctorSchedule";
 import DoctorAppointments from "../pages/doctor/DoctorAppointment";
-import PatientForgotPassword from "../pages/patient/PatientForgotPassword";
+
 import PatientProfile from "../pages/patient/PatientProfile";
 import DoctorForgotPassword from "../pages/doctor/DoctorForgotPassword";
 
@@ -39,6 +43,11 @@ function AppRoutes() {
 
       <Route path="/patient/login" element={<PatientLogin />} />
       <Route path="/patient/forgot-password" element={<PatientForgotPassword />} />
+
+<Route
+  path="/patient/reset-password"
+  element={<PatientResetPassword />}
+/>
 
       <Route path="/patient/profile" element={<PatientProfile />} />
 

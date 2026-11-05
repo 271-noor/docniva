@@ -1,347 +1,149 @@
-
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import Doctor from "../../models/Doctor.js";
+import {
+  hashPassword,
+  fakePasswordCheck,
+  isLocked,
+  recordFailedLogin,
+  clearLoginFailures,
+} from "../../utils/authHelpers.js";
+import {
+  issueAuthCookie,
+  clearAuthCookie,
+  withBearer,
+} from "../../utils/tokens.js";
+import { makeForgotPassword, makeResetPassword } from "./passwordResetFactory.js";
 
+const publicDoctor = (d) => ({
+  id: d._id,
+  name: d.name,
+  email: d.email,
+  phone: d.phone,
+  registrationNumber: d.registrationNumber,
+  qualification: d.qualification,
+  specialization: d.specialization,
+  experience: d.experience,
+  consultationFee: d.consultationFee,
+  isVerified: d.isVerified,
+});
 
-// ======================================================
-// DOCTOR REGISTER
-// ======================================================
-// New doctor registration.
-//
 // POST /api/doctors/register
-//
-// Body:
-// {
-//   name,
-//   email,
-//   phone,
-//   registrationNumber,
-//   qualification,
-//   specialization,
-//   experience,
-//   password
-// }
-// ======================================================
-
 export const registerDoctor = async (req, res) => {
+  const data = req.validated.body;
+
+  let doctor;
   try {
-
-    const {
-      name,
-      email,
-      phone,
-      registrationNumber,
-      qualification,
-      specialization,
-      experience,
-      password,
-    } = req.body;
-
-
-    // --------------------------------------------------
-    // REQUIRED FIELDS
-    // --------------------------------------------------
-
-    if (
-      !name ||
-      !email ||
-      !phone ||
-      !registrationNumber ||
-      !qualification ||
-      !specialization ||
-      experience === undefined ||
-      !password
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "All fields are required",
-      });
-    }
-
-
-    // --------------------------------------------------
-    // CHECK EXISTING DOCTOR
-    // --------------------------------------------------
-
-    const existingDoctor =
-      await Doctor.findOne({
-        $or: [
-          {
-            email: email
-              .toLowerCase()
-              .trim(),
-          },
-          {
-            registrationNumber:
-              registrationNumber.trim(),
-          },
-        ],
-      });
-
-
-    if (existingDoctor) {
+    doctor = await Doctor.create({
+      ...data,
+      password: await hashPassword(data.password),
+    });
+  } catch (err) {
+    if (err?.code === 11000) {
       return res.status(409).json({
         success: false,
-        message:
-          "Doctor with this email or registration number already exists",
+        message: "Doctor with this email or registration number already exists",
       });
     }
-
-
-    // --------------------------------------------------
-    // HASH PASSWORD
-    // --------------------------------------------------
-
-    const hashedPassword =
-      await bcrypt.hash(
-        password,
-        10
-      );
-
-
-    // --------------------------------------------------
-    // CREATE DOCTOR
-    // --------------------------------------------------
-
-    const doctor =
-      await Doctor.create({
-        name: name.trim(),
-        email: email
-          .toLowerCase()
-          .trim(),
-        phone: phone.trim(),
-
-        registrationNumber:
-          registrationNumber.trim(),
-
-        qualification:
-          qualification.trim(),
-
-        specialization:
-          specialization.trim(),
-
-        experience:
-          Number(experience),
-
-        password:
-          hashedPassword,
-      });
-
-
-    // --------------------------------------------------
-    // RESPONSE
-    // --------------------------------------------------
-    // Password response me nahi bhejna.
-
-    return res.status(201).json({
-      success: true,
-      message:
-        "Doctor registered successfully",
-
-      doctor: {
-        id: doctor._id,
-        name: doctor.name,
-        email: doctor.email,
-        phone: doctor.phone,
-
-        registrationNumber:
-          doctor.registrationNumber,
-
-        qualification:
-          doctor.qualification,
-
-        specialization:
-          doctor.specialization,
-
-        experience:
-          doctor.experience,
-      },
-    });
-
-  } catch (error) {
-
-    console.error(
-      "Doctor registration error:",
-      error.message
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    throw err;
   }
+
+  return res.status(201).json({
+    success: true,
+    message:
+      "Registration submitted. You can log in once our team verifies your account.",
+    doctor: publicDoctor(doctor),
+  });
 };
 
-
-// ======================================================
-// DOCTOR LOGIN
-// ======================================================
-// Existing doctor login.
-//
 // POST /api/doctors/login
-//
-// Body:
-// {
-//   email,
-//   password
-// }
-// ======================================================
-
 export const loginDoctor = async (req, res) => {
-  try {
+  const { email, password, rememberMe } = req.validated.body;
 
-    const {
-      email,
-      password,
-    } = req.body;
+  const doctor = await Doctor.findOne({ email }).select(
+    "+password +loginAttempts +lockUntil"
+  );
 
+  if (!doctor) {
+    await fakePasswordCheck(password);
+    return res
+      .status(401)
+      .json({ success: false, message: "Invalid email or password" });
+  }
 
-    // --------------------------------------------------
-    // REQUIRED FIELDS
-    // --------------------------------------------------
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Email and password are required",
-      });
-    }
-
-
-    // --------------------------------------------------
-    // FIND DOCTOR
-    // --------------------------------------------------
-
-    const doctor =
-      await Doctor.findOne({
-        email: email
-          .toLowerCase()
-          .trim(),
-      });
-
-
-    if (!doctor) {
-      return res.status(401).json({
-        success: false,
-        message:
-          "Invalid email or password",
-      });
-    }
-
-
-    // --------------------------------------------------
-    // PASSWORD CHECK
-    // --------------------------------------------------
-
-    const isPasswordValid =
-      await bcrypt.compare(
-        password,
-        doctor.password
-      );
-
-
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message:
-          "Invalid email or password",
-      });
-    }
-
-
-    // --------------------------------------------------
-    // CREATE JWT TOKEN
-    // --------------------------------------------------
-
-    const token =
-      jwt.sign(
-        {
-          id: doctor._id,
-          role: "doctor",
-        },
-
-        process.env.JWT_SECRET,
-
-        {
-          expiresIn: "7d",
-        }
-      );
-
-
-    // --------------------------------------------------
-    // RESPONSE
-    // --------------------------------------------------
-
-    return res.status(200).json({
-      success: true,
-      message:
-        "Login successful",
-
-      token,
-
-      doctor: {
-        id: doctor._id,
-        name: doctor.name,
-        email: doctor.email,
-        phone: doctor.phone,
-
-        registrationNumber:
-          doctor.registrationNumber,
-
-        qualification:
-          doctor.qualification,
-
-        specialization:
-          doctor.specialization,
-
-        experience:
-          doctor.experience,
-      },
-    });
-
-  } catch (error) {
-
-    console.error(
-      "Doctor login error:",
-      error.message
-    );
-
-    return res.status(500).json({
+  if (isLocked(doctor)) {
+    return res.status(429).json({
       success: false,
-      message: "Server error",
+      message: "Too many failed attempts. Please try again in 15 minutes.",
     });
   }
+
+  const valid = await bcrypt.compare(password, doctor.password);
+
+  if (!valid) {
+    await recordFailedLogin(Doctor, doctor);
+    return res
+      .status(401)
+      .json({ success: false, message: "Invalid email or password" });
+  }
+
+  if (doctor.isBlocked) {
+    return res
+      .status(403)
+      .json({ success: false, message: "Your account has been suspended" });
+  }
+
+  if (!doctor.isVerified) {
+    return res.status(403).json({
+      success: false,
+      code: "PENDING_APPROVAL",
+      message: "Your account is pending admin approval",
+    });
+  }
+
+  await clearLoginFailures(Doctor, doctor);
+
+  const token = issueAuthCookie(
+    res,
+    { id: doctor._id, role: "doctor" },
+    Boolean(rememberMe)
+  );
+
+  return res.status(200).json(
+    withBearer(
+      {
+        success: true,
+        message: "Login successful",
+        doctor: publicDoctor(doctor),
+      },
+      token
+    )
+  );
 };
 
-
-
-export const getAllDoctors = async (req, res) => {
-try {
-const doctors = await Doctor.find()
-.select("-password")
-.sort({ createdAt: -1 });
-
- 
-return res.status(200).json({
-  success: true,
-  doctors,
-});
- 
-
-} catch (error) {
-console.error(
-"Get all doctors error:",
-error.message
-);
-
- 
-return res.status(500).json({
-  success: false,
-  message: "Server error",
-});
- 
-
-}
+// POST /api/doctors/logout
+export const logoutDoctor = (req, res) => {
+  clearAuthCookie(res);
+  return res.status(200).json({ success: true, message: "Logged out" });
 };
+
+// GET /api/doctors/me
+export const getDoctorMe = async (req, res) => {
+  const doctor = await Doctor.findById(req.user.id);
+
+  if (!doctor) {
+    return res
+      .status(401)
+      .json({ success: false, message: "Account not available" });
+  }
+
+  return res.status(200).json({ success: true, doctor: publicDoctor(doctor) });
+};
+
+// POST /api/doctors/forgot-password
+export const forgotDoctorPassword = makeForgotPassword({
+  Model: Doctor,
+  resetPath: "/doctor/reset-password",
+});
+
+// POST /api/doctors/reset-password
+export const resetDoctorPassword = makeResetPassword(Doctor);

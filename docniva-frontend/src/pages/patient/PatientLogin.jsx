@@ -146,6 +146,17 @@ const handleSubmit = async (event) => {
               required
             />
 
+              {/* Forgot Password */}
+          <div className="flex justify-end">
+          <Link
+              to="/patient/forgot-password"
+              className="text-sm font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)]"
+          >
+            Forgot Password?
+          </Link>
+          </div>
+
+
             {/* Remember */}
             <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-secondary)]">
               <input

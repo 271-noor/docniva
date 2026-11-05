@@ -1,74 +1,39 @@
-
 import express from "express";
 
 import {
   getDoctorSchedule,
-  getDoctorScheduleForPatient,
   updateDoctorSchedule,
-  updateDoctorDateException,
+  upsertDateException,
+  deleteDateException,
 } from "../controllers/doctor/doctorScheduleController.js";
 
+import { protect, doctorOnly } from "../middleware/authMiddleware.js";
+import { validate } from "../middleware/validate.js";
 import {
-  protect,
-  doctorOnly,
-} from "../middleware/authMiddleware.js";
+  updateScheduleSchema,
+  exceptionSchema,
+  exceptionDateParams,
+} from "../validators/scheduleSchemas.js";
 
 const router = express.Router();
 
-// ======================================================
-// DOCTOR - GET OWN SCHEDULE
+// Ye saare routes sirf logged-in doctor ke liye hain
+router.use(protect, doctorOnly);
+
 // GET /api/doctors/schedule
-// ======================================================
+router.get("/", getDoctorSchedule);
 
-router.get(
-  "/",
-  protect,
-  doctorOnly,
-  getDoctorSchedule
-);
-
-// ======================================================
-// DOCTOR - UPDATE OWN WEEKLY SCHEDULE
 // PUT /api/doctors/schedule
-// ======================================================
+router.put("/", validate({ body: updateScheduleSchema }), updateDoctorSchedule);
 
-router.put(
-  "/",
-  protect,
-  doctorOnly,
-  updateDoctorSchedule
-);
-
-// ======================================================
-// DOCTOR - ADD / UPDATE DATE EXCEPTION
 // PUT /api/doctors/schedule/exception
-// ======================================================
+router.put("/exception", validate({ body: exceptionSchema }), upsertDateException);
 
-router.put(
-  "/exception",
-  protect,
-  doctorOnly,
-  updateDoctorDateException
+// DELETE /api/doctors/schedule/exception/:date
+router.delete(
+  "/exception/:date",
+  validate({ params: exceptionDateParams }),
+  deleteDateException
 );
-
-// ======================================================
-// PATIENT - GET SPECIFIC DOCTOR SCHEDULE
-// GET /api/doctors/schedule/doctor/:doctorId
-// ======================================================
-//
-// Public route.
-// Patient kisi specific doctor ka schedule dekh sakta hai.
-//
-// ======================================================
-
-router.get(
-  "/doctor/:doctorId",
-  getDoctorScheduleForPatient
-);
-
-// ======================================================
-// EXPORT
-// ======================================================
 
 export default router;
-
