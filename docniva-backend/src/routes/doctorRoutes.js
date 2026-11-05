@@ -37,6 +37,8 @@ import {
   slotsQuery,
 } from "../validators/bookingSchemas.js";
 
+import { updateDoctorProfileSchema } from "../validators/profileSchemas.js";
+
 const router = express.Router();
 
 // ---------- AUTH ----------
@@ -53,7 +55,7 @@ router.get("/", validate({ query: doctorListQuery }), getAllDoctors);
 // ---------- DOCTOR (login zaroori) ----------
 router.get("/dashboard", protect, doctorOnly, getDoctorDashboard);
 router.get("/profile", protect, doctorOnly, getDoctorProfile);
-router.put("/profile", protect, doctorOnly, updateDoctorProfile);
+router.put("/profile", protect, doctorOnly, validate({ body: updateDoctorProfileSchema }), updateDoctorProfile);
 router.get("/appointments", protect, doctorOnly, getDoctorAppointments);
 router.patch("/appointments/:appointmentId/status", protect, doctorOnly, updateAppointmentStatus);
 
