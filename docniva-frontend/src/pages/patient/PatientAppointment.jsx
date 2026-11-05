@@ -371,7 +371,7 @@ function PatientAppointments() {
                         </p>
 
                         <p className="mt-1 font-medium text-[var(--text-primary)]">
-                          {appointment.selectedTime}
+                          {appointment.timeLabel || appointment.selectedTime}
                         </p>
                       </div>
 
@@ -392,8 +392,8 @@ function PatientAppointments() {
                         </p>
 
                         <p className="mt-1 font-bold text-[var(--text-primary)]">
-                          {appointment.doctor?.consultationFee
-                            ? `₹${appointment.doctor.consultationFee}`
+                          {appointment.amount
+                            ? `₹${appointment.amount / 100}`
                             : "Not specified"}
                         </p>
                       </div>
