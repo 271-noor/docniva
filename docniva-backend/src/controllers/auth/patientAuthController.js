@@ -51,7 +51,8 @@ const sendVerificationEmail = (patient, rawToken) =>
 
 // POST /api/patients/register
 export const registerPatient = async (req, res) => {
-  const { name, email, phone, password } = req.validated.body;
+ 
+    const { name, email, phone, password, age, gender, city } = req.validated.body;
   const verify = requireVerification();
 
   const doc = {
@@ -61,6 +62,10 @@ export const registerPatient = async (req, res) => {
     password: await hashPassword(password),
     isEmailVerified: !verify,
   };
+
+  if (age !== undefined) doc.age = age;
+  if (gender) doc.gender = gender;
+  if (city) doc.city = city;
 
   let rawToken;
   if (verify) {
