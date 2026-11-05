@@ -24,6 +24,9 @@ const publicDoctor = (d) => ({
   specialization: d.specialization,
   experience: d.experience,
   consultationFee: d.consultationFee,
+  city: d.city,
+  gender: d.gender,
+  age: d.age,
   isVerified: d.isVerified,
 });
 
