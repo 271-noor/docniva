@@ -1,220 +1,113 @@
-
+import mongoose from "mongoose";
 import Appointment from "../../models/Appointment.js";
+import { refundAppointment } from "../../services/paymentService.js";
+import { slotStartDate } from "../../utils/dateTime.js";
 
-// ======================================================
-// GET DOCTOR APPOINTMENTS
-// ======================================================
-// Logged-in doctor ke saare appointments.
-//
+// Doctor ko sirf wahi appointments dikhti hain jinka payment ho chuka hai
+const PAID_STATES = ["paid", "refund_pending", "refunded"];
+const PATIENT_FIELDS = "name email phone age gender city";
+
+const fail = (res, code, message) =>
+  res.status(code).json({ success: false, message });
+
 // GET /api/doctors/appointments
-//
-// Doctor ID frontend se nahi lenge.
-// JWT se req.user.id milega.
-//
-// Middleware:
-// protect → doctorOnly → getDoctorAppointments
-// ======================================================
-
 export const getDoctorAppointments = async (req, res) => {
-  try {
+  const { status, page, limit } = req.validated.query;
 
-    // --------------------------------------------------
-    // Logged-in doctor ki ID
-    // --------------------------------------------------
+  const filter = {
+    doctor: req.user.id,
+    paymentStatus: mongoose.trusted({ $in: PAID_STATES }),
+  };
+  if (status) filter.status = status;
 
-    const doctorId = req.user.id;
+  const [appointments, total] = await Promise.all([
+    Appointment.find(filter)
+      .populate("patient", PATIENT_FIELDS)
+      .sort({ date: -1, selectedTime: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit),
+    Appointment.countDocuments(filter),
+  ]);
 
-
-    // --------------------------------------------------
-    // Doctor ke appointments find karo
-    // --------------------------------------------------
-
-    const appointments = await Appointment.find({
-      doctor: doctorId,
-    })
-      .populate(
-        "patient",
-        "name email phone"
-      )
-      .sort({
-        createdAt: -1,
-      });
-
-
-    // --------------------------------------------------
-    // Response
-    // --------------------------------------------------
-
-    return res.status(200).json({
-      success: true,
-      appointments,
-    });
-
-  } catch (error) {
-
-    console.error(
-      "Get doctor appointments error:",
-      error.message
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
+  return res.status(200).json({
+    success: true,
+    appointments,
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+  });
 };
 
-
-// ======================================================
-// UPDATE APPOINTMENT STATUS
-// ======================================================
-// Doctor appointment ko:
-// - confirmed
-// - rejected
-//
-// kar sakta hai.
-//
 // PATCH /api/doctors/appointments/:appointmentId/status
-//
-// Body:
-// {
-//   "status": "confirmed"
-// }
-//
-// Middleware:
-// protect → doctorOnly → updateAppointmentStatus
-// ======================================================
-
 export const updateAppointmentStatus = async (req, res) => {
-  try {
+  const { appointmentId } = req.validated.params;
+  const { status, rejectReason, meetingLink } = req.validated.body;
+  const doctorId = req.user.id;
 
-    // --------------------------------------------------
-    // Appointment ID
-    // --------------------------------------------------
+  // Query me doctor bhi hai: doosre doctor ki appointment par 404 aayega
+  const existing = await Appointment.findOne({
+    _id: appointmentId,
+    doctor: doctorId,
+  }).select("status paymentStatus date selectedTime consultationType");
 
-    const { appointmentId } = req.params;
+  if (!existing) return fail(res, 404, "Appointment not found");
 
-
-    // --------------------------------------------------
-    // New status
-    // --------------------------------------------------
-
-    const { status } = req.body;
-
-
-    // --------------------------------------------------
-    // Appointment ID validation
-    // --------------------------------------------------
-
-    if (!appointmentId) {
-      return res.status(400).json({
-        success: false,
-        message: "Appointment ID is required",
-      });
-    }
-
-
-    // --------------------------------------------------
-    // Status validation
-    // --------------------------------------------------
-    // Doctor ke liye abhi sirf confirmed/rejected
-    // allowed rakhe hain.
-
-    if (
-      !status ||
-      !["confirmed", "rejected"].includes(status)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Status must be confirmed or rejected",
-      });
-    }
-
-
-    // --------------------------------------------------
-    // Appointment find karo
-    // --------------------------------------------------
-
-    const appointment = await Appointment.findById(
-      appointmentId
-    );
-
-
-    if (!appointment) {
-      return res.status(404).json({
-        success: false,
-        message: "Appointment not found",
-      });
-    }
-
-
-    // --------------------------------------------------
-    // SECURITY CHECK
-    // --------------------------------------------------
-    // Doctor sirf apne appointment ka status
-    // change kar sakta hai.
-
-    if (
-      appointment.doctor.toString() !==
-      req.user.id.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "You can only manage your own appointments",
-      });
-    }
-
-
-    // --------------------------------------------------
-    // Status update
-    // --------------------------------------------------
-
-    appointment.status = status;
-
-    await appointment.save();
-
-
-    // --------------------------------------------------
-    // Updated appointment populate karo
-    // --------------------------------------------------
-
-    const updatedAppointment =
-      await Appointment.findById(
-        appointment._id
-      )
-        .populate(
-          "patient",
-          "name email phone"
-        )
-        .populate(
-          "doctor",
-          "name email phone qualification specialization experience"
-        );
-
-
-    // --------------------------------------------------
-    // Response
-    // --------------------------------------------------
-
-    return res.status(200).json({
-      success: true,
-      message:
-        `Appointment ${status} successfully`,
-      appointment: updatedAppointment,
-    });
-
-  } catch (error) {
-
-    console.error(
-      "Update doctor appointment status error:",
-      error.message
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+  if (existing.status !== "pending") {
+    return fail(res, 409, `This appointment is already ${existing.status}`);
   }
+
+  if (existing.paymentStatus !== "paid") {
+    return fail(res, 409, "The patient has not completed the payment yet");
+  }
+
+  const slotPassed =
+    slotStartDate(existing.date, existing.selectedTime).getTime() <= Date.now();
+
+  if (status === "confirmed" && slotPassed) {
+    return fail(res, 409, "This appointment time has already passed");
+  }
+
+  const set =
+    status === "confirmed"
+      ? { status: "confirmed", confirmedAt: new Date() }
+      : {
+          status: "rejected",
+          rejectReason: rejectReason || "Rejected by the doctor",
+          cancelledBy: "doctor",
+          cancelledAt: new Date(),
+        };
+
+  if (
+    status === "confirmed" &&
+    meetingLink &&
+    existing.consultationType === "Online"
+  ) {
+    set.meetingLink = meetingLink;
+  }
+
+  // Ek hi atomic step: patient ne is beech cancel kiya ho to ye update nahi hoga
+  const updated = await Appointment.findOneAndUpdate(
+    {
+      _id: appointmentId,
+      doctor: doctorId,
+      status: "pending",
+      paymentStatus: "paid",
+    },
+    { $set: set },
+    { new: true }
+  ).populate("patient", PATIENT_FIELDS);
+
+  if (!updated) {
+    return fail(res, 409, "Appointment status has changed. Please refresh and try again.");
+  }
+
+  if (status === "rejected") {
+    refundAppointment(updated._id, "Rejected by doctor").catch((err) =>
+      console.error("Refund trigger failed:", err.message)
+    );
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: `Appointment ${status} successfully`,
+    appointment: updated,
+  });
 };

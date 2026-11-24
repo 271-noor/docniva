@@ -39,6 +39,13 @@ import {
 
 import { updateDoctorProfileSchema } from "../validators/profileSchemas.js";
 
+import {
+  appointmentIdParams,
+  doctorAppointmentsQuery,
+  updateStatusSchema,
+} from "../validators/doctorAppointmentSchemas.js";
+
+
 const router = express.Router();
 
 // ---------- AUTH ----------
@@ -56,8 +63,10 @@ router.get("/", validate({ query: doctorListQuery }), getAllDoctors);
 router.get("/dashboard", protect, doctorOnly, getDoctorDashboard);
 router.get("/profile", protect, doctorOnly, getDoctorProfile);
 router.put("/profile", protect, doctorOnly, validate({ body: updateDoctorProfileSchema }), updateDoctorProfile);
-router.get("/appointments", protect, doctorOnly, getDoctorAppointments);
-router.patch("/appointments/:appointmentId/status", protect, doctorOnly, updateAppointmentStatus);
+router.get("/appointments", protect, doctorOnly, validate({ query: doctorAppointmentsQuery }),
+  getDoctorAppointments);
+router.patch("/appointments/:appointmentId/status", protect, doctorOnly, validate({ params: appointmentIdParams, body: updateStatusSchema }), 
+updateAppointmentStatus);
 
 // ---------- PUBLIC DOCTOR (hamesha sabse neeche, "/:doctorId" baaki paths ko na pakde) ----------
 router.get(
