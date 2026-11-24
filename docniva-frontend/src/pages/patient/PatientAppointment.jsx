@@ -469,6 +469,24 @@ function PatientAppointments() {
                         Find Another Doctor
                       </Button>
 
+
+                      {/* Payment Button */}
+
+                        {appointment.status === "pending" &&
+                        ["pending", "failed"].includes(
+                          appointment.paymentStatus
+                        ) && (
+                          <Button
+                            onClick={() =>
+                              navigate("/patient/appointment-confirmed", {
+                                state: appointment,
+                              })
+                            }
+                          >
+                            Pay Now
+                          </Button>
+                        )}
+
                       {appointment.status ===
                         "pending" && (
                         <Button
