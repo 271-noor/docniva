@@ -1,261 +1,182 @@
-
-import Razorpay from "razorpay";
-import crypto from "node:crypto";
 import Appointment from "../../models/Appointment.js";
+import { releaseExpiredHolds } from "../../services/bookingService.js";
+import {
+  getRazorpay,
+  isSignatureValid,
+  razorpayErrorMessage,
+  settlePayment,
+} from "../../services/paymentService.js";
+import { slotStartDate } from "../../utils/dateTime.js";
 
-// ======================================================
-// RAZORPAY CLIENT
-// Secret key sirf backend par use hogi.
-// ======================================================
+const PAYMENT_WINDOW_MINUTES = 15;
+const ACTIVE = ["pending", "confirmed"];
 
-const getRazorpayClient = () => {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+const fail = (res, code, message, extra = {}) =>
+  res.status(code).json({ success: false, message, ...extra });
 
-  if (!keyId || !keySecret) {
-    throw new Error("Razorpay API keys are missing");
+// POST /api/appointments/:appointmentId/payment/order
+export const createPaymentOrder = async (req, res) => {
+  const { appointmentId } = req.validated.params;
+  const patientId = req.user.id;
+
+  await releaseExpiredHolds({ patient: patientId });
+
+  const appointment = await Appointment.findOne({
+    _id: appointmentId,
+    patient: patientId,
+  });
+
+  if (!appointment) return fail(res, 404, "Appointment not found");
+
+  if (!ACTIVE.includes(appointment.status)) {
+    return fail(
+      res,
+      409,
+      appointment.cancelledBy === "system"
+        ? "The payment time has expired and the slot was released. Please book again."
+        : "This appointment cannot be paid for"
+    );
   }
 
-  return new Razorpay({
-    key_id: keyId,
-    key_secret: keySecret,
+  if (appointment.paymentStatus === "paid") {
+    return fail(res, 409, "Appointment is already paid");
+  }
+  if (!["pending", "failed"].includes(appointment.paymentStatus)) {
+    return fail(res, 409, "This payment is being refunded");
+  }
+
+  if (slotStartDate(appointment.date, appointment.selectedTime).getTime() <= Date.now()) {
+    return fail(res, 409, "This appointment time has already passed");
+  }
+
+  if (!Number.isSafeInteger(appointment.amount) || appointment.amount < 100) {
+    return fail(res, 400, "Invalid appointment payment amount");
+  }
+
+  let orderId = appointment.razorpayOrderId;
+
+  // Order pehle se bana hai to wahi dobara use karo (naya mat banao)
+  if (!orderId) {
+    let order;
+    try {
+      order = await getRazorpay().orders.create({
+        amount: appointment.amount,
+        currency: "INR",
+        receipt: String(appointment._id),
+        notes: { appointmentId: String(appointment._id) },
+      });
+    } catch (err) {
+      console.error("Razorpay order create failed:", razorpayErrorMessage(err));
+      return fail(res, 502, "Payment service is unavailable. Please try again shortly.");
+    }
+
+    const update = { razorpayOrderId: order.id };
+    // Pay karne ke liye hold 15 minute tak badhao (sirf pehle order par)
+    if (appointment.status === "pending") {
+      update.expiresAt = new Date(Date.now() + PAYMENT_WINDOW_MINUTES * 60 * 1000);
+    }
+
+    const stored = await Appointment.findOneAndUpdate(
+      { _id: appointment._id, razorpayOrderId: null },
+      { $set: update },
+      { new: true }
+    );
+
+    if (stored) {
+      orderId = order.id;
+    } else {
+      // Do click ek saath aaye the, jo pehle save hua wahi rakho
+      const current = await Appointment.findById(appointment._id).select("razorpayOrderId");
+      orderId = current?.razorpayOrderId;
+    }
+  }
+
+  if (!orderId) return fail(res, 500, "Unable to create payment order");
+
+  return res.status(201).json({
+    success: true,
+    message: "Payment order created",
+    order: { id: orderId, amount: appointment.amount, currency: "INR" },
+    keyId: process.env.RAZORPAY_KEY_ID,
   });
 };
 
-// ======================================================
-// CREATE PAYMENT ORDER
-// POST /api/appointments/:appointmentId/payment/order
-//
-// Logged-in patient apne appointment ke liye order banayega.
-// Amount database se li jayegi, frontend se nahi.
-// ======================================================
+// POST /api/appointments/:appointmentId/payment/verify
+export const verifyAppointmentPayment = async (req, res) => {
+  const { appointmentId } = req.validated.params;
+  const {
+    razorpay_order_id: orderId,
+    razorpay_payment_id: paymentId,
+    razorpay_signature: signature,
+  } = req.validated.body;
 
-export const createPaymentOrder = async (req, res) => {
+  const appointment = await Appointment.findOne({
+    _id: appointmentId,
+    patient: req.user.id,
+  });
+
+  if (!appointment) return fail(res, 404, "Appointment not found");
+
+  if (appointment.razorpayOrderId !== orderId) {
+    return fail(res, 400, "Payment order does not match appointment");
+  }
+
+  const secret = process.env.RAZORPAY_KEY_SECRET;
+  if (!secret) throw new Error("Razorpay secret key is missing");
+
+  if (!isSignatureValid(`${orderId}|${paymentId}`, signature, secret)) {
+    return fail(res, 400, "Invalid payment signature");
+  }
+
+  let payment;
   try {
-    const { appointmentId } = req.params;
-    const patientId = req.user.id;
+    payment = await getRazorpay().payments.fetch(paymentId);
+  } catch (err) {
+    console.error("Razorpay payment fetch failed:", razorpayErrorMessage(err));
+    return fail(res, 502, "Unable to confirm payment right now. If money was deducted, it will be confirmed automatically.");
+  }
 
-    // Sirf logged-in patient ka appointment find karo.
-    const appointment = await Appointment.findOne({
-      _id: appointmentId,
-      patient: patientId,
-    });
+  if (payment.order_id !== orderId) {
+    return fail(res, 400, "Payment details do not match the appointment");
+  }
 
-    if (!appointment) {
-      return res.status(404).json({
-        success: false,
-        message: "Appointment not found",
-      });
-    }
+  if (payment.status === "authorized") {
+    return fail(
+      res,
+      409,
+      "Payment received. It will be confirmed automatically within a few minutes.",
+      { paymentStatus: "pending" }
+    );
+  }
 
-    // Cancelled ya rejected appointment ke liye payment nahi.
-    if (["cancelled", "rejected"].includes(appointment.status)) {
-      return res.status(400).json({
-        success: false,
-        message: "This appointment cannot be paid for",
-      });
-    }
-
-    // Paid appointment ke liye doosra order mat banao.
-    if (appointment.paymentStatus === "paid") {
-      return res.status(409).json({
-        success: false,
-        message: "Appointment is already paid",
-      });
-    }
-
-    // Amount integer paise mein honi chahiye.
-    if (
-      !Number.isSafeInteger(appointment.amount) ||
-      appointment.amount < 100
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid appointment payment amount",
-      });
-    }
-
-    // Razorpay order create karo.
-    const razorpay = getRazorpayClient();
-
-    const order = await razorpay.orders.create({
-      amount: appointment.amount,
-      currency: "INR",
-      receipt: appointment._id.toString(),
-      notes: {
-        appointmentId: appointment._id.toString(),
-      },
-    });
-
-    // Order ID ko appointment ke saath save karo.
-    appointment.razorpayOrderId = order.id;
-    appointment.paymentStatus = "pending";
-    await appointment.save();
-
-    return res.status(201).json({
-      success: true,
-      message: "Payment order created",
-      order: {
-        id: order.id,
-        amount: order.amount,
-        currency: order.currency,
-      },
-      keyId: process.env.RAZORPAY_KEY_ID,
-    });
-  } catch (error) {
-    console.error("Create payment order error:", error.message);
-
-    return res.status(500).json({
-      success: false,
-      message: "Unable to create payment order",
+  if (payment.status !== "captured") {
+    return fail(res, 409, "Payment has not been completed", {
+      paymentStatus: payment.status,
     });
   }
-};
 
-// ======================================================
-// VERIFY PAYMENT
-// POST /api/appointments/:appointmentId/payment/verify
-//
-// Signature aur Razorpay payment status verify honge.
-// Client ke success message par blindly trust nahi karna.
-// ======================================================
+  const result = await settlePayment({ appointmentId: appointment._id, payment });
 
-export const verifyAppointmentPayment = async (req, res) => {
-  try {
-    const { appointmentId } = req.params;
-    const patientId = req.user.id;
-
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-    } = req.body;
-
-    // Required payment details check karo.
-    if (
-      !razorpay_order_id ||
-      !razorpay_payment_id ||
-      !razorpay_signature
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Payment verification details are required",
+  switch (result.outcome) {
+    case "paid":
+    case "already_paid":
+    case "revived":
+      return res.status(200).json({
+        success: true,
+        message: "Payment verified successfully",
+        paymentStatus: "paid",
+        appointmentStatus: result.appointment?.status || appointment.status,
       });
-    }
 
-    // Patient sirf apna appointment verify kar sakta hai.
-    const appointment = await Appointment.findOne({
-      _id: appointmentId,
-      patient: patientId,
-    });
+    case "refunded":
+      return fail(
+        res,
+        409,
+        "Your slot is no longer available, so your payment is being refunded. It reaches your account in 5-7 working days.",
+        { paymentStatus: "refund_pending" }
+      );
 
-    if (!appointment) {
-      return res.status(404).json({
-        success: false,
-        message: "Appointment not found",
-      });
-    }
-
-    // Pehle se paid appointment ko dobara process mat karo.
-    if (appointment.paymentStatus === "paid") {
-      if (appointment.razorpayPaymentId === razorpay_payment_id) {
-        return res.status(200).json({
-          success: true,
-          message: "Payment already verified",
-          paymentStatus: "paid",
-          appointmentStatus: appointment.status,
-        });
-      }
-
-      return res.status(409).json({
-        success: false,
-        message: "Appointment is already paid",
-      });
-    }
-
-    // Order ID database wale order se match honi chahiye.
-    if (appointment.razorpayOrderId !== razorpay_order_id) {
-      return res.status(400).json({
-        success: false,
-        message: "Payment order does not match appointment",
-      });
-    }
-
-    // Razorpay secret se expected signature generate karo.
-    const secret = process.env.RAZORPAY_KEY_SECRET;
-
-    if (!secret) {
-      throw new Error("Razorpay secret key is missing");
-    }
-
-    const expectedSignature = crypto
-      .createHmac("sha256", secret)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-      .digest("hex");
-
-    // Signature compare karne se pehle length check karo.
-    const expectedBuffer = Buffer.from(expectedSignature, "hex");
-    const receivedBuffer = Buffer.from(razorpay_signature, "hex");
-
-    const signatureIsValid =
-      expectedBuffer.length === receivedBuffer.length &&
-      crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
-
-    if (!signatureIsValid) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid payment signature",
-      });
-    }
-
-    // Razorpay se actual payment details fetch karo.
-    const razorpay = getRazorpayClient();
-
-    const payment = await razorpay.payments.fetch(
-      razorpay_payment_id
-    );
-
-    // Payment isi order ki honi chahiye.
-    if (
-      payment.order_id !== razorpay_order_id ||
-      payment.amount !== appointment.amount ||
-      payment.currency !== "INR"
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Payment details do not match the appointment",
-      });
-    }
-
-    // Payment captured hone par hi paid mark karo.
-    if (payment.status !== "captured") {
-      return res.status(409).json({
-        success: false,
-        message: "Payment has not been captured yet",
-        paymentStatus: payment.status,
-      });
-    }
-
-    // Verified payment details save karo.
-    appointment.paymentStatus = "paid";
-    appointment.razorpayPaymentId = razorpay_payment_id;
-
-    // Appointment status ko pending hi rehne do.
-    // Doctor ki existing approval process alag rahegi.
-    await appointment.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Payment verified successfully",
-      paymentStatus: appointment.paymentStatus,
-      appointmentStatus: appointment.status,
-    });
-  } catch (error) {
-    console.error("Verify payment error:", error.message);
-
-    return res.status(500).json({
-      success: false,
-      message: "Unable to verify payment",
-    });
+    default:
+      return fail(res, 409, "Payment could not be matched to this appointment. If money was deducted, contact support.");
   }
 };

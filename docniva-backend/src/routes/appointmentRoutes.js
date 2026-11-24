@@ -16,6 +16,7 @@ import {
   createAppointmentSchema,
   appointmentIdParams,
 } from "../validators/bookingSchemas.js";
+import { verifyPaymentSchema } from "../validators/paymentSchemas.js";
 
 const router = express.Router();
 
@@ -30,7 +31,7 @@ router.patch(
   cancelPatientAppointment
 );
 
-// Payment (ye Step 5 mein badlega)
+// Payment
 router.post(
   "/:appointmentId/payment/order",
   validate({ params: appointmentIdParams }),
@@ -38,7 +39,7 @@ router.post(
 );
 router.post(
   "/:appointmentId/payment/verify",
-  validate({ params: appointmentIdParams }),
+  validate({ params: appointmentIdParams, body: verifyPaymentSchema }),
   verifyAppointmentPayment
 );
 
