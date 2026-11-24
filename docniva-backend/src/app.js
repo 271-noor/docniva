@@ -13,6 +13,8 @@ import doctorScheduleRoutes from "./routes/doctorScheduleRoutes.js";
 // import paymentRoutes from "./routes/paymentRoutes.js";   // banane ke baad
 // import adminRoutes from "./routes/adminRoutes.js";       // banane ke baad
 
+import { razorpayWebhook } from "./controllers/payment/webhookController.js";
+
 const app = express();
 
 // Render/Railway proxy ke peeche hote hain (rate-limit + secure cookie ke liye)
@@ -37,6 +39,14 @@ app.use(
     },
     credentials: true,
   })
+);
+
+
+// Razorpay webhook: raw body zaroori hai, isliye json parser se pehle
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json", limit: "100kb" }),
+  razorpayWebhook
 );
 
 // Razorpay webhook ke liye raw body chahiye hoga, usko json se PEHLE mount karna
@@ -70,6 +80,16 @@ const authLimiter = rateLimit({
 });
 
 app.use("/api", apiLimiter);
+
+const paymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many payment requests, try again later" },
+});
+app.use("/api/appointments/:appointmentId/payment", paymentLimiter);
+
 // Apne actual login/register/forgot paths ke hisaab se adjust karo:
 app.use("/api/patients/login", authLimiter);
 app.use("/api/patients/register", authLimiter);
