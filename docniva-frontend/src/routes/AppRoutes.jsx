@@ -3,7 +3,7 @@ import Home from "../pages/public/Home";
 import RoleSelection from "../pages/public/RoleSelection";
 
 import PatientLogin from "../pages/patient/PatientLogin";
-import PatientRegister from "../pages/patient/PatientRegister";
+
 
 import PatientForgotPassword from "../pages/patient/PatientForgotPassword";
 import PatientResetPassword from "../pages/patient/PatientResetPassword";
@@ -16,7 +16,7 @@ import AppointmentConfirmed from "../pages/patient/AppointmentConfirmed";
 import PatientAppointments from "../pages/patient/PatientAppointment";
 
 import DoctorLogin from "../pages/doctor/DoctorLogin";
-import DoctorRegister from "../pages/doctor/DoctorRegister";
+// import DoctorRegister from "../pages/doctor/DoctorRegister";
 import DoctorDashboard from "../pages/doctor/DoctorDashboard";
 import DoctorProfile from "../pages/doctor/DoctorProfile";
 
@@ -51,9 +51,9 @@ function AppRoutes() {
 
       <Route path="/patient/profile" element={<PatientProfile />} />
 
-      <Route
+            <Route
         path="/patient/register"
-        element={<PatientRegister />}
+        element={<Navigate to="/patient/login?signup=1" replace />}
       />
 
       <Route
@@ -103,7 +103,7 @@ function AppRoutes() {
 
       <Route
         path="/doctor/register"
-        element={<DoctorRegister />}
+        element={<Navigate to="/doctor/login?signup=1" replace />}
       />
 
       <Route
